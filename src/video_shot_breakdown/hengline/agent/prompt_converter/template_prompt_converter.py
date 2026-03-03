@@ -9,6 +9,7 @@ from typing import Optional
 
 from video_shot_breakdown.hengline.agent.prompt_converter.base_prompt_converter import BasePromptConverter
 from video_shot_breakdown.hengline.agent.prompt_converter.prompt_converter_models import AIVideoInstructions, AIVideoPrompt
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import GlobalMetadata
 from video_shot_breakdown.hengline.agent.shot_segmenter.shot_segmenter_models import ShotType
 from video_shot_breakdown.hengline.agent.video_splitter.video_splitter_models import FragmentSequence, VideoFragment
 from video_shot_breakdown.hengline.hengline_config import HengLineConfig
@@ -27,7 +28,7 @@ class TemplatePromptConverter(BasePromptConverter):
             ShotType.WIDE_SHOT: "Wide shot, {location}, {description}, cinematic, establishing shot"
         }
 
-    def convert(self, fragment_sequence: FragmentSequence) -> AIVideoInstructions:
+    def convert(self, fragment_sequence: FragmentSequence, global_metadata: GlobalMetadata) -> AIVideoInstructions:
         """使用模板将片段转换为提示词"""
         info(f"开始提示词转换，片段数: {len(fragment_sequence.fragments)}")
 

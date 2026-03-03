@@ -9,7 +9,7 @@ from abc import abstractmethod, ABC
 from typing import Optional
 
 from video_shot_breakdown.hengline.agent.base_models import ElementType
-from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript, BaseElement
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript, BaseElement, GlobalMetadata
 from video_shot_breakdown.hengline.agent.shot_segmenter.shot_segmenter_models import ShotSequence, ShotType
 from video_shot_breakdown.hengline.hengline_config import HengLineConfig
 from video_shot_breakdown.logger import info, warning, error
@@ -27,7 +27,7 @@ class BaseShotSegmenter(ABC):
         info(f"初始化分镜拆分器: {self.__class__.__name__}")
 
     @abstractmethod
-    def split(self, parsed_script: ParsedScript) -> ShotSequence:
+    def split(self, parsed_script: ParsedScript, global_metadata: GlobalMetadata) -> ShotSequence:
         """拆分剧本为镜头序列（抽象方法）"""
         pass
 

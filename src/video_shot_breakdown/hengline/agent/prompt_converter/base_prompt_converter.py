@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from video_shot_breakdown.hengline.agent.prompt_converter.prompt_converter_models import AIVideoInstructions
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import GlobalMetadata
 from video_shot_breakdown.hengline.agent.video_splitter.video_splitter_models import FragmentSequence, VideoFragment
 from video_shot_breakdown.hengline.hengline_config import HengLineConfig
 from video_shot_breakdown.logger import info, error, warning
@@ -26,7 +27,7 @@ class BasePromptConverter(ABC):
         info(f"初始化提示词转换器: {self.__class__.__name__}")
 
     @abstractmethod
-    def convert(self, fragment_sequence: FragmentSequence) -> AIVideoInstructions:
+    def convert(self, fragment_sequence: FragmentSequence, global_metadata: GlobalMetadata) -> AIVideoInstructions:
         """将片段序列转换为AI提示词（抽象方法）"""
         pass
 

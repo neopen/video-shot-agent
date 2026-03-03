@@ -108,7 +108,54 @@ class SceneInfo(BaseModel):
         description="所有剧本元素，按出现顺序排列"
     )
 
+########################### 全局元数据模型 - 存储全剧关键信息，供后续阶段使用 ###############################
+class KeyProp(BaseModel):
+    """关键道具信息"""
+    name: str
+    description: str
+    appears_in: List[str] = []
 
+
+class CharacterOutfit(BaseModel):
+    """角色服装信息"""
+    character: str
+    description: str
+    color: Optional[str] = None
+
+
+class KeyDialogue(BaseModel):
+    """关键台词"""
+    character: str
+    content: str
+    scene_id: str
+    importance: str = "medium"  # high/medium/low
+
+
+class KeyDate(BaseModel):
+    """重要日期"""
+    date: str
+    context: str
+    scene_id: str
+
+
+class KeyLocation(BaseModel):
+    """重要地点"""
+    name: str
+    description: str
+    appears_in: List[str] = []
+
+
+class GlobalMetadata(BaseModel):
+    """全局元数据 - 存储全剧关键信息"""
+    key_props: List[KeyProp] = []
+    character_outfits: List[CharacterOutfit] = []
+    key_dialogues: List[KeyDialogue] = []
+    key_dates: List[KeyDate] = []
+    key_locations: List[KeyLocation] = []
+    continuity_notes: str = ""
+
+
+############################ 剧本解析结果模型 - 包含核心数据和统计信息 ###############################
 class ParsedScript(BaseModel):
     """剧本解析结果 - 阶段1输出"""
 
@@ -150,6 +197,8 @@ class ParsedScript(BaseModel):
         },
         description="解析统计数据"
     )
+
+    global_metadata: GlobalMetadata = Field(default_factory=GlobalMetadata)
 
     def to_dict(self) -> dict:
         """转换为字典表示"""

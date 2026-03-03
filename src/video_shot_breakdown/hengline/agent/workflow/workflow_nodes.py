@@ -94,7 +94,7 @@ class WorkflowNodes:
         输出：shots (带时间戳的镜头序列)
         """
         try:
-            shot_sequence = self.shot_segmenter.shot_process(state.parsed_script)
+            shot_sequence = self.shot_segmenter.shot_process(state.parsed_script, state.parsed_script.global_metadata)
             debug(f"分镜解析完成，镜头数: {len(shot_sequence.shots)}")
 
             # 保存剧本解析结果
@@ -135,7 +135,7 @@ class WorkflowNodes:
         # 3. 在动作边界自然切分
         # 4. 生成片段级连续性锚点
         try:
-            fragment_sequence = self.video_splitter.video_process(state.shot_sequence)
+            fragment_sequence = self.video_splitter.video_process(state.shot_sequence, state.parsed_script.global_metadata)
             debug(f"视频分段完成，视频片段数: {len(fragment_sequence.fragments)}")
 
             # 保存剧本解析结果
@@ -177,7 +177,7 @@ class WorkflowNodes:
         # 4. 生成技术参数
 
         try:
-            instructions = self.prompt_converter.prompt_process(state.fragment_sequence)
+            instructions = self.prompt_converter.prompt_process(state.fragment_sequence, state.parsed_script.global_metadata)
             debug(f"片段指令转换完成，指令片段数: {len(instructions.fragments)}")
 
             # 保存剧本解析结果

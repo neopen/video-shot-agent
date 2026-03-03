@@ -10,7 +10,7 @@ import re
 from typing import Optional, List
 
 from video_shot_breakdown.hengline.agent.base_agent import BaseAgent
-from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript, SceneInfo
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript, SceneInfo, GlobalMetadata
 from video_shot_breakdown.hengline.agent.shot_segmenter.base_shot_segmenter import BaseShotSegmenter
 from video_shot_breakdown.hengline.agent.shot_segmenter.rule_shot_segmenter import RuleShotSegmenter
 from video_shot_breakdown.hengline.agent.shot_segmenter.shot_segmenter_models import ShotSequence, ShotInfo, ShotType
@@ -26,7 +26,7 @@ class LLMShotSegmenter(BaseShotSegmenter, BaseAgent):
         self.llm_client = llm_client
         self.prop_registry = {}  # 通用道具注册表 {prop_key: {name, first_shot, occurrences}}
 
-    def split(self, parsed_script: ParsedScript) -> ShotSequence:
+    def split(self, parsed_script: ParsedScript, global_metadata: GlobalMetadata) -> ShotSequence:
         """使用LLM拆分剧本"""
         info(f"使用LLM拆分分镜，剧本: {parsed_script.title}")
 

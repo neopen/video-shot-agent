@@ -10,6 +10,7 @@ from typing import Optional
 from video_shot_breakdown.hengline.agent.base_models import AgentMode
 from video_shot_breakdown.hengline.agent.prompt_converter.prompt_converter_factory import PromptConverterFactory
 from video_shot_breakdown.hengline.agent.prompt_converter.prompt_converter_models import AIVideoInstructions
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import GlobalMetadata
 from video_shot_breakdown.hengline.agent.video_splitter.video_splitter_models import FragmentSequence
 from video_shot_breakdown.hengline.hengline_config import HengLineConfig
 from video_shot_breakdown.logger import debug, error
@@ -33,12 +34,12 @@ class PromptConverterAgent:
         else:
             self.converter = PromptConverterFactory.create_converter(AgentMode.RULE, config)
 
-    def prompt_process(self, fragment_sequence: FragmentSequence) -> AIVideoInstructions | None:
+    def prompt_process(self, fragment_sequence: FragmentSequence, global_metadata: GlobalMetadata) -> AIVideoInstructions | None:
         """ 视频片段 """
         debug("开始视频转换提示词")
         try:
 
-            return self.converter.convert(fragment_sequence)
+            return self.converter.convert(fragment_sequence, global_metadata)
 
         except Exception as e:
             print_log_exception()

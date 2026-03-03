@@ -11,6 +11,7 @@ from video_shot_breakdown.hengline.agent.base_agent import BaseAgent
 from video_shot_breakdown.hengline.agent.prompt_converter.base_prompt_converter import BasePromptConverter
 from video_shot_breakdown.hengline.agent.prompt_converter.prompt_converter_models import AIVideoPrompt, AIVideoInstructions
 from video_shot_breakdown.hengline.agent.prompt_converter.template_prompt_converter import TemplatePromptConverter
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import GlobalMetadata
 from video_shot_breakdown.hengline.agent.video_splitter.video_splitter_models import FragmentSequence, VideoFragment
 from video_shot_breakdown.hengline.hengline_config import HengLineConfig
 from video_shot_breakdown.hengline.language_manage import get_language
@@ -24,7 +25,7 @@ class LLMPromptConverter(BasePromptConverter, BaseAgent):
         super().__init__(config)
         self.llm_client = llm_client
 
-    def convert(self, fragment_sequence: FragmentSequence) -> AIVideoInstructions:
+    def convert(self, fragment_sequence: FragmentSequence, global_metadata: GlobalMetadata) -> AIVideoInstructions:
         """使用LLM转换提示词"""
         info(f"使用LLM转换提示词，片段数: {len(fragment_sequence.fragments)}")
 
@@ -37,7 +38,7 @@ class LLMPromptConverter(BasePromptConverter, BaseAgent):
 
         for fragment in fragment_sequence.fragments:
             try:
-                prompt = self._convert_fragment_with_llm(fragment, fragment_sequence.source_info)
+                prompt = self._convert_fragment_with_llm(fragment, fragment_sequence.source_info, global_metadata)
                 prompts.append(prompt)
             except Exception as e:
                 error(f"片段{fragment.id}转换失败: {str(e)}")
@@ -52,11 +53,16 @@ class LLMPromptConverter(BasePromptConverter, BaseAgent):
         )
         return self.post_process(instructions)
 
-    def _convert_fragment_with_llm(self, fragment: VideoFragment, source_info: Dict) -> AIVideoPrompt:
+    def _convert_fragment_with_llm(self, fragment: VideoFragment, source_info: Dict, global_metadata: GlobalMetadata) -> AIVideoPrompt:
         """使用LLM转换单个片段 - 生成双语提示词（英文+原始语言）"""
 
         # 检测原始剧本语言
         original_language = self._detect_original_language(fragment)
+
+        scene_context = source_info.get("scene_context", {})
+
+        # 格式化全局信息
+        global_context = self._format_global_context(global_metadata, scene_context)
 
         # 准备提示词
         user_prompt = self._get_prompt_template("prompt_converter_user")
@@ -72,7 +78,8 @@ class LLMPromptConverter(BasePromptConverter, BaseAgent):
             dm_model=self.config.target_model.value,
             video_style=self.config.default_style.value,
             max_length=self.config.max_prompt_length,
-            min_length=self.config.min_prompt_length
+            min_length=self.config.min_prompt_length,
+            global_context=global_context
         )
 
         # 调用LLM

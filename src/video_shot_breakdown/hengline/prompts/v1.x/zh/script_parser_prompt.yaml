@@ -49,7 +49,46 @@ script_parser_system:
               }}
             ]
           }}
-        ]
+        ],
+        "global_metadata": {{
+          "key_props": [
+            {{
+              "name": "道具名称（如《飞鸟集》、借阅卡、电影票根）",
+              "description": "道具的详细描述和重要性",
+              "appears_in": ["scene_001", "scene_002"]  # 出现的场景
+            }}
+          ],
+          "character_outfits": [
+            {{
+              "character": "角色名",
+              "description": "角色的专属服装描述（如：明黄色防水外卖服）",
+              "color": "服装主色调"
+            }}
+          ],
+          "key_dialogues": [
+            {{
+              "character": "角色名",
+              "content": "重要台词原文",
+              "scene_id": "scene_001",
+              "importance": "high/medium/low"
+            }}
+          ],
+          "key_dates": [
+            {{
+              "date": "日期信息（如下周三）",
+              "context": "出现的上下文",
+              "scene_id": "scene_004"
+            }}
+          ],
+          "key_locations": [
+            {{
+              "name": "地点名称",
+              "description": "地点描述",
+              "appears_in": ["scene_001", "scene_002"]
+            }}
+          ],
+          "continuity_notes": "需要特别注意的连续性要点（如：雨衣颜色必须统一、书名的准确性等）"
+        }}
       }}
       
     解析规则：
@@ -84,6 +123,13 @@ script_parser_system:
       
       9. 置信度评估：根据解析的明确程度和上下文一致性评估置信度，0表示完全不确定，1表示完全确定
     
+    全局信息提取规则：
+      1. key_props：识别所有对剧情有重要作用的具体物品
+      2. character_outfits：提取每个角色的专属服装特征
+      3. key_dialogues：识别推动剧情发展的核心台词
+      4. key_dates：提取所有重要的时间信息
+      5. key_locations：识别主要场景地点
+      6. continuity_notes：总结需要保持一致的视觉元素
 
 # 自然语言转结构化分镜，提示词模板
 natural_language_script:
@@ -168,3 +214,4 @@ script_parser_user:
       5. 角色的服装特征在description字段中准确体现
       6. 关键道具信息（书名、借阅卡、票根等）在description字段中完整保留
       7. 台词内容完整，不可省略
+      8. global_metadata 完整包含所有关键信息

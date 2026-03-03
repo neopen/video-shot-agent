@@ -8,7 +8,7 @@
 from typing import Optional
 
 from video_shot_breakdown.hengline.agent.base_models import AgentMode
-from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript, GlobalMetadata
 from video_shot_breakdown.hengline.agent.shot_segmenter.shot_segmenter_factory import ShotSegmenterFactory
 from video_shot_breakdown.hengline.agent.shot_segmenter.shot_segmenter_models import ShotSequence
 from video_shot_breakdown.hengline.hengline_config import HengLineConfig
@@ -34,7 +34,7 @@ class ShotSegmenterAgent:
         else:
             self.segmenter = ShotSegmenterFactory.create_segmenter(AgentMode.RULE, self.config)
 
-    def shot_process(self, structured_script: ParsedScript) -> ShotSequence | None:
+    def shot_process(self, structured_script: ParsedScript, global_metadata: GlobalMetadata) -> ShotSequence | None:
         """
         规划剧本的时序分段
 
@@ -47,7 +47,7 @@ class ShotSegmenterAgent:
         debug("开始拆分镜头")
         try:
 
-            return self.segmenter.split(structured_script)
+            return self.segmenter.split(structured_script, global_metadata)
 
         except Exception as e:
             print_log_exception()

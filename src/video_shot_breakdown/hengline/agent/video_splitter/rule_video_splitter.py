@@ -7,6 +7,7 @@
 """
 from typing import List, Optional
 
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import GlobalMetadata
 from video_shot_breakdown.hengline.agent.shot_segmenter.shot_segmenter_models import ShotSequence, ShotInfo, ShotType
 from video_shot_breakdown.hengline.agent.video_splitter.base_video_splitter import BaseVideoSplitter
 from video_shot_breakdown.hengline.agent.video_splitter.video_splitter_models import FragmentSequence, VideoFragment
@@ -22,7 +23,7 @@ class RuleVideoSplitter(BaseVideoSplitter):
         # 简单规则：镜头时长>5秒就拆分
         self.split_threshold = getattr(config, 'llm_split_threshold', 5.5)  # 超过5秒触发分割
 
-    def cut(self, shot_sequence: ShotSequence) -> FragmentSequence:
+    def cut(self, shot_sequence: ShotSequence, global_metadata: GlobalMetadata) -> FragmentSequence:
         """简单规则分割：镜头时长>5秒就拆分"""
         info(f"开始视频分割，镜头数: {len(shot_sequence.shots)}")
 

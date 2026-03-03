@@ -8,6 +8,7 @@
 from typing import Optional
 
 from video_shot_breakdown.hengline.agent.base_models import AgentMode
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import GlobalMetadata
 from video_shot_breakdown.hengline.agent.shot_segmenter.shot_segmenter_models import ShotSequence
 from video_shot_breakdown.hengline.agent.video_splitter.video_splitter_factory import VideoSplitterFactory
 from video_shot_breakdown.hengline.agent.video_splitter.video_splitter_models import FragmentSequence
@@ -33,12 +34,12 @@ class VideoSplitterAgent:
         else:
             self.splitter = VideoSplitterFactory.create_splitter(AgentMode.RULE, self.config)
 
-    def video_process(self, shot_sequence: ShotSequence) -> FragmentSequence | None:
+    def video_process(self, shot_sequence: ShotSequence, global_metadata: GlobalMetadata) -> FragmentSequence | None:
         """ 视频片段 """
         debug("开始切割视频片段")
         try:
 
-            return self.splitter.cut(shot_sequence)
+            return self.splitter.cut(shot_sequence, global_metadata)
 
         except Exception as e:
             print_log_exception()

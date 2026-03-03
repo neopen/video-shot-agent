@@ -12,6 +12,7 @@ import time
 
 from video_shot_breakdown.hengline.agent.base_agent import BaseAgent
 from video_shot_breakdown.hengline.agent.base_models import AgentMode
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import GlobalMetadata
 from video_shot_breakdown.hengline.agent.shot_segmenter.shot_segmenter_models import ShotSequence, ShotInfo
 from video_shot_breakdown.hengline.agent.video_splitter.base_video_splitter import BaseVideoSplitter
 from video_shot_breakdown.hengline.agent.video_splitter.rule_video_splitter import RuleVideoSplitter
@@ -40,7 +41,7 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseAgent):
         self.valid_scene_ids = set()
         self.overall_weather = None
 
-    def cut(self, shot_sequence: ShotSequence) -> FragmentSequence:
+    def cut(self, shot_sequence: ShotSequence, global_metadata: GlobalMetadata) -> FragmentSequence:
         """使用LLM智能分割视频，保持连贯性"""
         info(f"开始智能视频分割，镜头数: {len(shot_sequence.shots)}")
 
@@ -82,13 +83,12 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseAgent):
                         "prev_shot": shot_sequence.shots[shot_idx - 1] if shot_idx > 0 else None,
                         "next_shot": shot_sequence.shots[shot_idx + 1] if shot_idx < len(shot_sequence.shots) - 1 else None,
                         "scene_context": scene_context,
-                        "shot_sequence": shot_sequence,
                         "current_time": current_time,
                         "fragment_offset": fragment_id_counter,
                         "overall_weather": self.overall_weather
                     }
 
-                    shot_fragments = self._split_shot_with_llm(context)
+                    shot_fragments = self._split_shot_with_llm(context, global_metadata)
 
                     # 修复分割后片段的描述
                     shot_fragments = self._fix_fragments_continuity(shot_fragments, shot)
@@ -362,7 +362,7 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseAgent):
         debug(f"片段ID规范化完成: {len(fragments)}个片段")
         return normalized
 
-    def _split_shot_with_llm(self, context: Dict[str, Any]) -> List[VideoFragment]:
+    def _split_shot_with_llm(self, context: Dict[str, Any], global_metadata: GlobalMetadata) -> List[VideoFragment]:
         """使用LLM分割单个镜头"""
         shot = context["shot"]
         cache_key = f"{shot.id}_{shot.duration}_{hash(shot.description)}"
@@ -375,7 +375,7 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseAgent):
             )
 
         # 准备提示词
-        user_prompt = self._get_enhanced_prompt_template(context)
+        user_prompt = self._get_enhanced_prompt_template(context, global_metadata)
         system_prompt = self._get_prompt_template("video_splitter_system")
 
         debug(f"调用LLM分割镜头 {shot.id}")
@@ -415,7 +415,7 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseAgent):
             error(f"LLM分割失败: {str(e)}")
             raise
 
-    def _get_enhanced_prompt_template(self, context: Dict[str, Any]) -> str:
+    def _get_enhanced_prompt_template(self, context: Dict[str, Any], global_metadata: GlobalMetadata) -> str:
         """获取增强的提示词模板"""
         shot = context["shot"]
         prev_shot = context.get("prev_shot")
@@ -423,8 +423,8 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseAgent):
         scene_context = context.get("scene_context", {})
         overall_weather = context.get("overall_weather", "overcast")
 
-        shot_sequence = context.get("shot_sequence")
-        key_props_info = self._extract_key_props_from_sequence(shot_sequence)
+        # 格式化全局metadata
+        global_context = self._format_global_metadata(global_metadata)
 
         # 构建详细上下文
         scene_info = ""
@@ -457,7 +457,7 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseAgent):
             max_segment=self.max_split_segment,
             overall_weather=overall_weather,
             continuity_notes=self._get_continuity_notes(shot, context),
-            key_props_info=key_props_info  # 传递全剧关键信息
+            global_context=global_context  # 传递格式化的全局信息
         )
 
     def _extract_key_props_from_sequence(self, shot_sequence: ShotSequence) -> str:

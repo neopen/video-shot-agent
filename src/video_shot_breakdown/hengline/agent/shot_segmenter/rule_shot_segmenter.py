@@ -8,7 +8,7 @@
 from typing import List, Optional
 
 from video_shot_breakdown.hengline.agent.base_models import ElementType
-from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript, BaseElement, SceneInfo
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript, BaseElement, SceneInfo, GlobalMetadata
 from video_shot_breakdown.hengline.agent.shot_segmenter.base_shot_segmenter import BaseShotSegmenter
 from video_shot_breakdown.hengline.agent.shot_segmenter.shot_segmenter_models import ShotSequence, ShotInfo, ShotType
 from video_shot_breakdown.hengline.hengline_config import HengLineConfig
@@ -28,7 +28,7 @@ class RuleShotSegmenter(BaseShotSegmenter):
             "max_dialogue_duration": 5.0,  # 最长对话时长
         }
 
-    def split(self, parsed_script: ParsedScript) -> ShotSequence:
+    def split(self, parsed_script: ParsedScript, global_metadata: GlobalMetadata) -> ShotSequence:
         """使用简单规则拆分剧本"""
         info(f"开始分镜拆分，剧本: {parsed_script.title}")
 
