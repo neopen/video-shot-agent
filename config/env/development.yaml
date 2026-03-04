@@ -9,4 +9,4 @@ api:
 llm:
   default:
     model_name: "gpt-4o-mini"
-    max_tokens: 5000
+    max_tokens: 8000

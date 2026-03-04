@@ -79,7 +79,7 @@ class AIConfig:
     base_url: str = None  # 用于本地部署或特定API端点
     api_key: Optional[SecretStr] = None
     temperature: float = 0.1
-    max_tokens: int = 5000
+    max_tokens: int = 10000
     max_retries: int = 3  # 最大重试次数
     seed: int = Random().randint(1000, 999999999999999)
     response_format: str = "json"  # 响应格式，默认为JSON

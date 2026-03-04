@@ -130,7 +130,7 @@ def _fill_default_config(config: AIConfig = None, **kwargs) -> AIConfig:
         base_url=kwargs.get('base_url', ""),
         api_key=kwargs.get("api_key", None),
         temperature=kwargs.get("temperature", 0.1),
-        max_tokens=kwargs.get("max_tokens", 5000),
+        max_tokens=kwargs.get("max_tokens", 10000),
     )
 
     if not kwargs:
