@@ -130,7 +130,7 @@ class ScriptParserAgent:
 
         # 3. 对话完整性
         dialogues = script.get_elements_by_type(ElementType.DIALOGUE)
-        dialogue_density = len(dialogues) / (len(original_text) / 200)  # 每200字符的对话数
+        dialogue_density = len(dialogues) / (len(original_text) / 500)  # 每200字符的对话数
         if dialogue_density < 0.1 and '"' in original_text or '说' in original_text:
             warnings.append("对话提取可能不完整")
             dialogue_score = 0.5
@@ -140,7 +140,7 @@ class ScriptParserAgent:
 
         # 4. 动作完整性
         actions = script.get_elements_by_type(ElementType.ACTION)
-        action_verbs = ['走', '跑', '坐', '站', '拿', '看', '笑', '哭', '转身', '点头', ]
+        action_verbs = ['走', '跑', '坐', '站', '拿', '看', '笑', '哭', '转身', '点头', '摇头', '开门', '关门', '吃', '喝', '打', '跳', '飞', '游泳']
         verb_count = sum(1 for verb in action_verbs if verb in original_text)
         if verb_count > 0 and len(actions) < verb_count * 0.5:
             warnings.append("动作提取可能不完整")
@@ -172,18 +172,18 @@ class ScriptParserAgent:
 
         # 基于元素数量和完整性计算置信度
         if script.scenes:
-            confidence["scenes"] = min(1.0, len(script.scenes) * 0.3)
+            confidence["scenes"] = min(1.0, round(len(script.scenes) * 0.3), 2)
 
         if script.characters:
-            confidence["characters"] = min(1.0, len(script.characters) * 0.4)
+            confidence["characters"] = min(1.0, round(len(script.characters) * 0.4), 2)
 
         dialogues = script.get_elements_by_type(ElementType.DIALOGUE)
         if dialogues:
-            confidence["dialogues"] = min(1.0, len(dialogues) * 0.2)
+            confidence["dialogues"] = min(1.0, round(len(dialogues) * 0.2), 2)
 
         actions = script.get_elements_by_type(ElementType.ACTION)
         if actions:
-            confidence["actions"] = min(1.0, len(actions) * 0.3)
+            confidence["actions"] = min(1.0, round(len(actions) * 0.3), 2)
 
         # 总体置信度
         if confidence:
