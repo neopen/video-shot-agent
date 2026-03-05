@@ -7,31 +7,70 @@
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional, Dict, Any, Literal
 
 from pydantic import BaseModel, Field
 
 from video_shot_breakdown.hengline.agent.base_models import ElementType
 
-
-class CharacterInfo(BaseModel):
-    """角色信息模型"""
-    name: str = Field(..., description="角色名称")
-    gender: str = Field(..., description="角色性别")
-    role: str = Field(..., description="角色类型（主角、配角等）")
-    # 核心特征（可选）
-    description: Optional[str] = Field(
-        default=None,
-        description="简化的角色描述（如有）"
-    )
-
-    # MVP中只保留最关键的特征
-    key_traits: List[str] = Field(
-        default_factory=list,
-        description="关键特征列表，如外貌、性格等"
-    )
+# ========================= 音频上下文模型 - 包含环境声音、背景音乐等信息 =========================
+class SoundType(str, Enum):
+    """环境音类型"""
+    RAIN = "rain"  # 雨声
+    WIND = "wind"  # 风声
+    THUNDER = "thunder"  # 雷声
+    WATER_DRIP = "water_drip"  # 滴水声
+    FOOTSTEP = "footstep"  # 脚步声
+    TRAFFIC = "traffic"  # 交通声
+    CROWD = "crowd"  # 人群声
+    MUSIC = "music"  # 背景音乐
+    TV_NOISE = "tv_noise"  # 电视噪音
+    BIRD = "bird"  # 鸟叫声
+    SILENCE = "silence"  # 安静/无声
+    OTHER = "other"  # 其他未分类的声音
 
 
+class SceneType(str, Enum):
+    """场景类型"""
+    INDOOR = "indoor"  # 室内
+    OUTDOOR = "outdoor"  # 室外
+    CAFE = "cafe"  # 咖啡店
+    PARK = "park"  # 公园
+    STREET = "street"  # 街道
+    LIVING_ROOM = "living_room"  # 客厅
+    RAINY_OUTDOOR = "rainy_outdoor"  # 雨天户外
+    NIGHT_OUTDOOR = "night_outdoor"  # 夜间户外
+    OTHER = "other" # 其他未分类的场景
+
+
+class EnvironmentSound(BaseModel):
+    """环境音信息"""
+    sound_type: SoundType = Field(..., description="环境音类型")
+    intensity: float = Field(default=0.5, ge=0.0, le=1.0, description="强度/音量")
+    continuous: bool = Field(default=True, description="是否持续")
+    description: Optional[str] = Field(None, description="详细描述")
+    timing: Optional[str] = Field(None, description="出现时机，如'开场'、'高潮'、'结尾'")
+
+
+class SceneAudioContext(BaseModel):
+    """场景音频上下文"""
+    scene_type: SceneType = Field(..., description="场景类型")
+    env_sounds: List[EnvironmentSound] = Field(default_factory=list, description="环境音列表")
+    has_dialogue: bool = Field(default=False, description="是否有对话")
+    has_voiceover: bool = Field(default=False, description="是否有旁白")
+    atmosphere: str = Field(default="neutral", description="氛围描述，如'紧张'、'温馨'、'忧伤'")
+    reverb: float = Field(default=0.2, ge=0.0, le=1.0, description="混响强度")
+
+
+class ElementAudioContext(BaseModel):
+    """元素级别的音频上下文"""
+    sound_type: Optional[SoundType] = Field(None, description="该元素产生的声音类型")
+    description: Optional[str] = Field(None, description="声音描述")
+    intensity: float = Field(default=0.5, ge=0.0, le=1.0, description="强度")
+
+
+# ========================= 基础模型定义 - 包含剧本元素、角色信息、场景信息等核心数据结构 ==================
 class BaseElement(BaseModel):
     """剧本元素基类 - 所有类型元素的共同字段"""
     id: str = Field(..., description="元素唯一标识，格式：elem_001")
@@ -84,6 +123,26 @@ class BaseElement(BaseModel):
         default="neutral",
         description="伴随情绪：neutral/happy/angry/sad/fear"
     )
+    # 元素音频上下文
+    audio_context: Optional[ElementAudioContext] = Field(None, description="元素音频上下文")
+
+
+class CharacterInfo(BaseModel):
+    """角色信息模型"""
+    name: str = Field(..., description="角色名称")
+    gender: str = Field(..., description="角色性别")
+    role: str = Field(..., description="角色类型（主角、配角等）")
+    # 核心特征（可选）
+    description: Optional[str] = Field(
+        default=None,
+        description="简化的角色描述（如有）"
+    )
+
+    # MVP中只保留最关键的特征
+    key_traits: List[str] = Field(
+        default_factory=list,
+        description="关键特征列表，如外貌、性格等"
+    )
 
 
 class SceneInfo(BaseModel):
@@ -107,6 +166,11 @@ class SceneInfo(BaseModel):
         default=None,
         description="天气（如有）：sunny/rainy/snowy/cloudy"
     )
+    # 音频上下文
+    audio_context: SceneAudioContext = Field(default_factory=lambda: SceneAudioContext(
+        scene_type=SceneType.OUTDOOR,
+        env_sounds=[]
+    ))
 
     # 扁平化的元素数组（按sequence排序）
     elements: List[BaseElement] = Field(
@@ -150,7 +214,10 @@ class GlobalMetadata(BaseModel):
     # 关键地点
     key_locations: List[LocationItem] = Field(default_factory=list, description="主要场景地点")
     # 连续性要点
-    continuity_notes: str = Field("", description="需要特别注意的连续性要点")
+    continuity_notes: str = Field(default="", description="需要特别注意的连续性要点")
+    # 全局音频设置
+    audio_atmosphere: str = Field(default="neutral", description="全局音频氛围")
+    recurring_sounds: List[SoundType] = Field(default_factory=list, description="重复出现的声音")
 
     def to_dict(self) -> dict:
         """转换为字典表示"""
@@ -165,7 +232,7 @@ class ParsedScript(BaseModel):
         default_factory=lambda: {
             "parsed_at": datetime.now().isoformat(),
             "version": "mvp_1.0",
-            "source_type": "unknown"
+            "parser_type": "unknown"
         },
         description="解析元数据"
     )

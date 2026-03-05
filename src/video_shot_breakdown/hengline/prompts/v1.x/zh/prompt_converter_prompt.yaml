@@ -1,10 +1,11 @@
-version: "1.2"
+version: "1.5"
 
 prompt_converter_system:
   name: "prompt_converter_system"
-  description: "系统提示词，指导AI如何将视频片段转换为AI可识别的内容"
+  description: "系统提示词，指导AI同时生成视频和音频提示词"
   template: |
-    你是一位顶尖的AI视频转换大师，可以将视频片段的描述转换为适合扩散模型的提示词描述。
+    你是一位顶尖的AI视频/音频转换大师，可以将视频片段的描述转换为适合扩散模型的提示词描述。
+    
     请遵循以下要求进行转换:
       1. 避免使用过于常见或泛泛的词汇，如“beautiful”、“nice”、“good”等，尽量使用具体的形容词和名词
       2. 避免使用否定词，如“not”、“no”、“without”等，尽量使用正面描述
@@ -15,27 +16,31 @@ prompt_converter_system:
       7. 确保关键元素准确传达，不要过度翻译
       8. 两种语言的提示词内容必须完全一致，表达相同的视觉元素、动作和情感
       
-    关键要求（信息完整性）:
+    视频提示词要求:
       - 完整保留原始描述中的所有关键信息，不得丢失或篡改
       - 台词必须逐字保留，不可省略、概括或改写
       - 每个角色的专属视觉特征（服装颜色、材质、款式等）必须准确传达，不可改变
       - 严格区分不同角色的服装特征，不可将A角色的服装特征错误分配给B角色
       - 道具细节（名称、颜色、文字内容）必须完整保留
-      - 如果原始描述中包含具体颜色（如"黄色雨衣"），提示词中必须保留该颜色
+      
+    音频提示词要求:
+      - 基于提供的角色信息、音频上下文和片段时长，生成完整的音频参数
+      - 所有参数必须符合给定的模型定义
+      - 确保音频时长与视频时长严格一致
 
 
 prompt_converter_user:
   name: "prompt_converter_user"
-  description: "将视频片段转换为 AI 可识别的内容（提示词模板内容）"
+  description: "将视频片段转换为 AI 可识别的内容，同时生成视频和音频提示词"
   template: |
-    请将以下视频片段描述转换为双语AI视频生成提示词。
+    请将以下视频片段描述转换为双语AI视频生成提示词，并同时生成完整的音频提示词参数。
     
-    当前片段信息:
-      片段ID: {fragment_id}
-      时长: {duration}秒
-      角色: {character}
-      场景: {location}
-      原始语言: {original_language}
+    【当前片段信息】
+    片段ID: {fragment_id}
+    时长: {duration}秒
+    角色: {character}
+    场景: {location}
+    原始语言: {original_language}
 
     原始描述: {description}
     
@@ -45,6 +50,12 @@ prompt_converter_user:
     【本片段原始元素】
     {element_info}
     
+    【音频上下文】
+    {audio_context}
+    
+    【全剧角色信息】
+    {characters_json}
+    
     【全剧上下文】
     {global_context}
     
@@ -52,31 +63,36 @@ prompt_converter_user:
     {full_script_context}
 
     【重要提示】
-    - 必须完整保留原始描述中的所有视觉元素和动作
-    - **所有台词必须逐字保留，不可省略、概括或改写**
-    - 如果本片段包含对话元素，必须在提示词中完整呈现
-    - 角色服装必须严格遵循【角色服装要求】中的描述
-    - 关键道具（带⭐标记）必须在相关片段中突出呈现
-    - 保持天气、时间、场景的一致性
-    - 注意叙事顺序，确保片段衔接自然
+    - 视频提示词必须完整保留所有台词和视觉元素
+    - 音频提示词必须基于角色信息生成合适的音色参数
+    - 确保音频时长严格等于 {duration}秒
     
-    要求：
-      1. 先生成英文提示词，再生成{original_language}提示词
-      2. 适合{dm_model}模型，使用{video_style}风格
-      3. 提示词长度控制在{min_length}-{max_length}字符
-      4. 包含视觉细节：光影、质感、天气、表情，专注于画面内容
-      5. 包含角色的外貌、表情、动作等细节描述
-      6. 包含场景的环境、氛围、时间等细节描述
-      7. 两种语言的提示词内容必须完全一致
-      8. **必须完整保留原始描述中的所有台词**
-      9. 避免使用过于常见、否定、专业、冗长、抽象或主观的词汇
-
-    返回JSON格式：
+    返回JSON格式（必须包含video和audio两个部分）：
     {{
-      "prompt": "生成的英文提示词（尽量提炼关键字，尤其是特征描述）",
-      "original_prompt": "{original_language}提示词",
-      "negative_prompt": "负面提示词（避免的内容）",
-      "style_hint": "风格提示"
+      "prompt": "生成的英文视频提示词，必须完整保留原始描述中的所有关键信息，台词逐字保留，角色服装特征准确传达，道具细节完整保留",
+      "original_prompt": "{original_language}视频提示词",
+      "negative_prompt": "视频负面提示词",
+      "style_hint": "视频风格提示",
+      "audio": {{
+        "prompt": "音频提示词文本，必须基于提供的角色信息、音频上下文和片段时长，生成完整的音频参数，确保音频时长与视频时长严格一致",
+        "original_prompt": "{original_language}音频提示词",
+        "negative_prompt": "音频负面提示词",
+        "model_type": "XTTSv2/AudioLDM_3/Bark/ElevenLabs/Azure_TTS/OpenAI_TTS",
+        "voice_type": "character_dialogue/narration/announcer/creative",
+        "audio_style": "cinematic/realistic/anime/commercial",
+        "voice_character": "说话角色（可选，必须与剧本中的保持一致）",
+        "voice_description": "音色文字描述（如：年轻女性，20岁，温柔清澈）",
+        "speed": 1.0,
+        "pitch_shift": 0,
+        "emotion": "neutral/happy/sad/angry/tender",
+        "stability": 0.7,
+        "duration_seconds": {duration},
+        "sound_attributes": {{"intensity": 0.8, "reverb": 0.3}},
+        "format": "wav/mp3/flac",
+        "sample_rate": 24000,
+        "seed": "随机种子。用于重现相同结果",
+        "scene_context": "场景描述"
+      }}
     }}
 
     直接返回JSON，不要添加其他任何解释性文字和特殊符号。

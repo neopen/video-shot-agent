@@ -29,11 +29,27 @@ script_parser_system:
         ],
         "scenes": [
           {{
-            "id": "场景唯一ID，格式：scene_001",
+            "id": "scene_001",
             "location": "场景地点",
             "description": "场景视觉化描述（如有）",
-            "time_of_day": "早晨/中午/下午/傍晚/夜晚",
+            "time_of_day": "早晨/中午/下午/傍晚/夜晚/凌晨等（如有）",
             "weather": "晴天/雨天/阴天/雪天/暖阳/灰蒙蒙等（如有）",
+            "audio_context": {{
+              "scene_type": "indoor/outdoor/cafe/park/street/living_room/rainy_outdoor/night_outdoor/other",
+              "env_sounds": [
+                {{
+                  "sound_type": "rain/wind/thunder/water_drip/footstep/traffic/crowd/music/tv_noise/bird/silence/other",
+                  "intensity": 0.0-1.0,
+                  "continuous": true/false,
+                  "description": "声音描述",
+                  "timing": "开场/高潮/结尾"
+                }}
+              ],
+              "has_dialogue": true/false,
+              "has_voiceover": true/false,
+              "atmosphere": "紧张/温馨/忧伤/平静/神秘",
+              "reverb": 0.0-1.0
+            }},
             "elements": [
               {{
                 "id": "elem_001",
@@ -46,7 +62,12 @@ script_parser_system:
                 "target_character": "目标角色名，必须与 characters[].name 的值保持一致，若没有则为 null",
                 "description": "视觉化描述，供AI生成画面使用",
                 "intensity": "动作或语气等的强度等级，0-1之间的浮点数。0.1-0.3: 轻微动作/语气；0.4-0.6: 中等强度；0.7-0.9: 强烈；1.0: 极端强度",
-                "emotion": "情绪标签，可选值：neutral/happy/sad/angry/fear/surprise/disgust/anxious/calm/tender"
+                "emotion": "neutral/happy/sad/angry/fear/surprise/disgust/anxious/calm/tender",
+                "audio_context": {{
+                  "sound_type": "rain/wind/thunder/water_drip/footstep/traffic/crowd/music/tv_noise/bird/silence/other",
+                  "description": "声音描述",
+                  "intensity": 0.0-1.0
+                }}
               }}
             ]
           }}
@@ -78,7 +99,9 @@ script_parser_system:
               "appears_in": ["scene_001", "scene_002"]
             }}
           ],
-          "continuity_notes": "需要特别注意的连续性要点（如：雨衣颜色必须统一、书名的准确性等）"
+          "continuity_notes": "需要特别注意的连续性要点（如：雨衣颜色必须统一、书名的准确性等）",
+          "audio_atmosphere": "全局音频氛围",
+          "recurring_sounds": ["rain", "footstep"]
         }}
       }}
       
@@ -113,24 +136,7 @@ script_parser_system:
       8. 保持原始：不添加剧本中没有的内容，必须保持与剧本的顺序一致
       
       9. 置信度评估：根据解析的明确程度和上下文一致性评估置信度，0表示完全不确定，1表示完全确定
-    
-    全局信息提取规则：
-      global_metadata 的作用是为后续环节提供贯穿全文的上下文增强，只提取需要在所有片段中保持一致的元素：
-      1. key_props：识别所有贯穿全文或对剧情有重要作用的具体物品
-         - 例如：书《飞鸟集》（出现在多个场景）、借阅卡（核心道具）、电影票根（结尾关键）
-         - 不需要：一次性道具、普通物品
-      
-      2. character_outfits：提取每个角色的专属、统一的服装特征
-         - 例如：陈阳的"黄色雨衣"（贯穿全文）、林小雨的"素色外套"
-         - 不需要：临时更换的服装、非特征性描述
-      
-      3. key_locations：识别主要、重复出现的场景地点
-         - 例如：咖啡店外长椅（主要场景）、屋檐下（结尾场景）
-         - 不需要：一闪而过的背景地点
-      
-      4. continuity_notes：总结需要保持一致的视觉元素
-         - 例如："雨衣颜色必须统一"、"书名必须始终为《飞鸟集》"
-         - 基于剧本中的重复强调或明显需要保持一致的要素
+
 
 # 自然语言转结构化分镜，提示词模板
 natural_language_script:
@@ -205,9 +211,62 @@ script_parser_user:
   template: |
     请解析以下剧本内容，提取各部分的详细信息，返回完整的JSON解析结果。
 
+    【剧本内容】：
     {script_text}
+    
+    【音频识别规则】：
+      1. 环境音识别：
+         - 出现"雨"、"下雨"、"雨声" → sound_type: "rain"
+         - 出现"风"、"风声" → sound_type: "wind"
+         - 出现"雷"、"雷声" → sound_type: "thunder"
+         - 出现"滴水"、"水滴" → sound_type: "water_drip"
+         - 出现"脚步"、"脚步声" → sound_type: "footstep"
+         - 出现"车流"、"交通" → sound_type: "traffic"
+         - 出现"人群"、"人声" → sound_type: "crowd"
+         - 出现"音乐"、"背景音乐" → sound_type: "music"
+         - 出现"电视"、"电视机" → sound_type: "tv_noise"
+         - 出现"鸟"、"鸟叫" → sound_type: "bird"
+         - 出现"安静"、"无声" → sound_type: "silence"
+       
+      2. 场景类型识别：
+         - 室内/家/房间 → scene_type: "indoor" 或 "living_room"
+         - 咖啡店/咖啡馆 → scene_type: "cafe"
+         - 公园 → scene_type: "park"
+         - 街道/马路 → scene_type: "street"
+         - 雨天+户外 → scene_type: "rainy_outdoor"
+         - 夜晚+户外 → scene_type: "night_outdoor"
+       
+      3. 强度评估（0-1）：
+         - 根据形容词判断："大雨" → intensity 0.8-1.0
+         - "小雨"、"细雨" → intensity 0.2-0.4
+         - "脚步声渐近" → intensity 0.3-0.7
+       
+      4. 是否持续：
+         - 背景音 → continuous: true
+         - 点状音效（敲门、滴水）→ continuous: false
+       
+      5. 氛围推断：
+         - 根据上下文推断整体氛围（紧张/温馨/忧伤/平静）
+    
+    【全局信息提取规则】：
+      global_metadata 的作用是为后续环节提供贯穿全文的上下文增强，只提取需要在所有片段中保持一致的元素：
+      1. key_props：识别所有贯穿全文或对剧情有重要作用的具体物品
+         - 例如：书《飞鸟集》（出现在多个场景）、借阅卡（核心道具）、电影票根（结尾关键）等
+         - 不需要：一次性道具、普通物品
+      
+      2. character_outfits：提取每个角色的专属、统一的服装特征
+         - 例如：陈阳的"黄色雨衣"（贯穿全文）、林小雨的"素色外套"
+         - 不需要：临时更换的服装、非特征性描述
+      
+      3. key_locations：识别主要、重复出现的场景地点
+         - 例如：咖啡店外长椅（主要场景）、屋檐下（结尾场景）
+         - 不需要：一闪而过的背景地点
+      
+      4. continuity_notes：总结需要保持一致的视觉元素
+         - 例如："雨衣颜色必须统一"、"书名必须始终为《飞鸟集》"
+         - 基于剧本中的重复强调或明显需要保持一致的要素
 
-    注意：请严格按照系统提示词的要求进行解析，确保输出的JSON格式正确且包含所有必要字段，确保：
+    【注意】：请严格按照系统提示词的要求进行解析，确保输出的JSON格式正确且包含所有必要字段，确保：
       1. JSON格式正确，不要添加其他任何解释性文字和特殊符号
       2. 包含所有提取的信息
       3. 角色名称保持一致

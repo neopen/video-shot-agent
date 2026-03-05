@@ -7,7 +7,7 @@
 """
 from dataclasses import dataclass
 
-from video_shot_breakdown.hengline.agent.base_models import VideoStyle, AIPlatform
+from video_shot_breakdown.hengline.agent.base_models import VideoStyle, VideoModelType, AudioModelType
 from video_shot_breakdown.hengline.client.client_config import AIConfig
 
 @dataclass
@@ -37,7 +37,8 @@ class HengLineConfig(AIConfig):
     ai_splitter_enabled: bool = True  # 是否启用AI分割器
 
     # ======================指令转换
-    target_model: AIPlatform = AIPlatform.RUNWAY_GEN2
+    video_model: VideoModelType = VideoModelType.RUNWAY_GEN2
+    audio_model: AudioModelType = AudioModelType.XTTSv2
     default_negative_prompt: str = "blurry, distorted, low quality, cartoonish, bad anatomy"
     default_style: VideoStyle = VideoStyle.CINEMATIC
     max_prompt_length: int = 1000

@@ -7,11 +7,11 @@
 """
 from abc import abstractmethod, ABC
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from video_shot_breakdown.hengline.agent.base_models import ScriptType, ElementType
-from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript, SceneInfo, CharacterInfo, BaseElement, GlobalMetadata, PropItem, CharacterOutfit, \
-    LocationItem
+from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript, SceneInfo, CharacterInfo, BaseElement, \
+    GlobalMetadata, PropItem, CharacterOutfit, LocationItem, ElementAudioContext, SoundType, SceneAudioContext, SceneType, EnvironmentSound
 from video_shot_breakdown.hengline.tools.script_assessor_tool import ComplexityAssessor
 from video_shot_breakdown.logger import info, warning
 
@@ -93,38 +93,28 @@ class BaseScriptParser(ABC):
         # 构建场景列表
         scenes = []
         for scene_idx, scene_data in enumerate(data.get("scenes", [])):
-            elements = []
-            for elem_idx, elem_data in enumerate(scene_data.get("elements", [])):
-                # 确保元素类型是ElementType枚举
-                elem_type = ElementType(elem_data.get("type", "action"))
-
-                element = BaseElement(
-                    id=elem_data.get("id", self._generate_element_id(scene_idx, elem_idx)),
-                    type=elem_type,
-                    sequence=elem_data.get("sequence", elem_idx + 1),
-                    duration=elem_data.get("duration", 3.0),
-                    confidence=elem_data.get("confidence", 0.8),
-                    content=elem_data.get("content", ""),
-                    character=elem_data.get("character"),
-                    target_character=elem_data.get("target_character"),
-                    description=elem_data.get("description", ""),
-                    intensity=elem_data.get("intensity", 0.5),
-                    emotion=elem_data.get("emotion", "自然")
-                )
-                elements.append(element)
-
-            scene = SceneInfo(
-                id=scene_data.get("id", self._generate_scene_id(scene_idx)),
-                location=scene_data.get("location", "未知地点"),
-                description=scene_data.get("description"),
-                time_of_day=scene_data.get("time_of_day"),
-                weather=scene_data.get("weather"),
-                elements=elements
-            )
+            scene = self._build_scene_data(scene_data, scene_idx)
             scenes.append(scene)
 
         # 构建角色列表
-        characters = [
+        characters = self._build_character_data(data)
+
+        # 返回完整解析结果
+        return ParsedScript(
+            title=data.get("title"),
+            characters=characters,
+            scenes=scenes,
+            global_metadata=self._build_global_metadata(data.get("global_metadata", {})),
+            metadata={
+                "parsed_at": datetime.now().isoformat(),
+                "version": "mvp_1.0",
+                "parser_type": self.__class__.__name__
+            }
+        )
+
+    def _build_character_data(self, data: Dict[str, Any]) -> List[CharacterInfo]:
+        """构建角色对象"""
+        return [
             CharacterInfo(
                 name=char_data["name"],
                 gender=char_data["gender"],
@@ -135,8 +125,88 @@ class BaseScriptParser(ABC):
             for char_data in data.get("characters", [])
         ]
 
-        _global_metadata = data.get("global_metadata", {})
-        global_metadata = GlobalMetadata(
+    def _build_scene_data(self, scene_data: Dict[str, Any], scene_idx: int) -> SceneInfo:
+        """构建场景对象"""
+        elements = []
+        for elem_idx, elem_data in enumerate(scene_data.get("elements", [])):
+            # 构建元素对象
+            element = self._build_element_data(elem_data, scene_idx, elem_idx)
+            elements.append(element)
+
+        return SceneInfo(
+            id=scene_data.get("id", self._generate_scene_id(scene_idx)),
+            location=scene_data.get("location", "none"),
+            description=scene_data.get("description"),
+            time_of_day=scene_data.get("time_of_day"),
+            weather=scene_data.get("weather"),
+            # 处理场景级音频上下文
+            audio_context=self._build_audio_context(scene_data.get("audio_context", {})),
+            elements=elements
+        )
+
+    def _build_element_data(self, elem_data: Dict[str, Any], scene_idx: int, elem_idx: int) -> BaseElement:
+        """构建元素对象"""
+        # 确保元素类型是ElementType枚举
+        elem_type = ElementType(elem_data.get("type", "action"))
+
+        # 处理节点音频上下文
+        _element_audio_context = elem_data.get("audio_context")
+        element_audio_context = None
+        if _element_audio_context and _element_audio_context != {}:
+            element_audio_context = ElementAudioContext(
+                sound_type=SoundType(_element_audio_context.get("sound_type", "other")),
+                description=_element_audio_context.get("description", ""),
+                intensity=_element_audio_context.get("intensity", 0.5),
+            )
+
+        return BaseElement(
+            id=elem_data.get("id", self._generate_element_id(scene_idx, elem_idx)),
+            type=elem_type,
+            sequence=elem_data.get("sequence", elem_idx + 1),
+            duration=elem_data.get("duration", 3.0),
+            confidence=elem_data.get("confidence", 0.8),
+            content=elem_data.get("content", ""),
+            character=elem_data.get("character"),
+            target_character=elem_data.get("target_character"),
+            description=elem_data.get("description", ""),
+            intensity=elem_data.get("intensity", 0.5),
+            emotion=elem_data.get("emotion", "neutral"),
+            audio_context=element_audio_context,
+        )
+
+
+    def _build_audio_context(self, audio_data: Dict[str, Any]) -> SceneAudioContext:
+        """构建场景级音频上下文"""
+        if not audio_data:
+            return SceneAudioContext(scene_type=SceneType.OTHER)
+
+        env_sounds = [
+            EnvironmentSound(
+                sound_type=SoundType(env_sound.get("sound_type", "other")),
+                description=env_sound.get("description"),
+                continuous=env_sound.get("continuous", True),
+                intensity=env_sound.get("intensity", 0.5),
+                timing=env_sound.get("timing")
+            )
+            for env_sound in audio_data.get("env_sounds", [])
+        ]
+
+        return SceneAudioContext(
+            scene_type=SceneType(audio_data.get("scene_type", "other")),
+            env_sounds=env_sounds,
+            has_dialogue=audio_data.get("has_dialogue", False),
+            has_voiceover=audio_data.get("has_voiceover", False),
+            atmosphere=audio_data.get("atmosphere", "neutral"),
+            reverb=audio_data.get("reverb", 0.2),
+        )
+
+
+    def _build_global_metadata(self, global_data: Dict[str, Any]) -> GlobalMetadata:
+        """构建全局元数据对象"""
+        if not global_data:
+            return GlobalMetadata()
+
+        return GlobalMetadata(
             key_props=[
                 PropItem(
                     name=prop_data.get("name", "未知道具"),
@@ -145,7 +215,7 @@ class BaseScriptParser(ABC):
                     color=prop_data.get("color", ""),
                     appears_in=prop_data.get("appears_in", [])
                 )
-                for prop_data in _global_metadata.get("key_props", [])
+                for prop_data in global_data.get("key_props", [])
             ],
             character_outfits=[
                 CharacterOutfit(
@@ -155,7 +225,7 @@ class BaseScriptParser(ABC):
                     color=outfit_data.get("color", ""),
                     material=outfit_data.get("material", "")
                 )
-                for outfit_data in _global_metadata.get("character_outfits", [])
+                for outfit_data in global_data.get("character_outfits", [])
             ],
             key_locations=[
                 LocationItem(
@@ -164,21 +234,9 @@ class BaseScriptParser(ABC):
                     appears_in=loc_data.get("appears_in", []),
                     visual_cues=loc_data.get("visual_cues", [])
                 )
-                for loc_data in _global_metadata.get("key_locations", [])
+                for loc_data in global_data.get("key_locations", [])
             ],
-            continuity_notes =_global_metadata.get("continuity_notes", "")
-        )
-
-        # 返回完整解析结果
-        return ParsedScript(
-            title=data.get("title"),
-            characters=characters,
-            scenes=scenes,
-            global_metadata=global_metadata,
-            metadata={
-                "parsed_at": datetime.now().isoformat(),
-                "version": "mvp_1.0",
-                "source_type": "llm_parsed",
-                "parser_type": self.__class__.__name__
-            }
+            continuity_notes=global_data.get("continuity_notes", ""),
+            audio_atmosphere=global_data.get("audio_atmosphere", "neutral"),
+            recurring_sounds=[SoundType(sound) for sound in global_data.get("recurring_sounds", [])]
         )
