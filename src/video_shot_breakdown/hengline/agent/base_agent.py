@@ -207,7 +207,7 @@ class BaseAgent(ABC):
             if relevant_props:
                 if format_type == "prompt":
                     # 简洁格式：只列名称
-                    props = [p.name for p in relevant_props[:3]]
+                    props = [p.name for p in relevant_props[:10]]
                     sections.append(f"关键道具：{', '.join(props)}")
 
                 elif format_type == "split":
@@ -232,7 +232,7 @@ class BaseAgent(ABC):
         if global_metadata.key_locations:
             if format_type == "prompt":
                 # 简洁格式：只列名称
-                locs = [loc.name for loc in global_metadata.key_locations[:2]]
+                locs = [loc.name for loc in global_metadata.key_locations[:10]]
                 sections.append(f"主要场景：{', '.join(locs)}")
 
             elif format_type == "split":
@@ -256,7 +256,7 @@ class BaseAgent(ABC):
         if global_metadata.continuity_notes:
             if format_type == "prompt":
                 # 简洁格式：只取前50字
-                notes = global_metadata.continuity_notes[:50] + "..." if len(global_metadata.continuity_notes) > 50 else global_metadata.continuity_notes
+                notes = global_metadata.continuity_notes[:100] + "..." if len(global_metadata.continuity_notes) > 50 else global_metadata.continuity_notes
                 sections.append(f"注意：{notes}")
 
             elif format_type == "split":

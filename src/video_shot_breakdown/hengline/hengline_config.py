@@ -41,7 +41,7 @@ class HengLineConfig(AIConfig):
     audio_model: AudioModelType = AudioModelType.XTTSv2
     default_negative_prompt: str = "blurry, distorted, low quality, cartoonish, bad anatomy"
     default_style: VideoStyle = VideoStyle.CINEMATIC
-    max_prompt_length: int = 1000
+    max_prompt_length: int = 200    # 提示词最大长度（单词数）
     min_prompt_length: int = 10
 
 

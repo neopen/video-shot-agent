@@ -12,7 +12,7 @@ from video_shot_breakdown.hengline.agent.prompt_converter.prompt_converter_model
 from video_shot_breakdown.hengline.agent.script_parser.script_parser_models import ParsedScript
 from video_shot_breakdown.hengline.agent.video_splitter.video_splitter_models import FragmentSequence, VideoFragment
 from video_shot_breakdown.hengline.hengline_config import HengLineConfig
-from video_shot_breakdown.logger import info, error, warning
+from video_shot_breakdown.logger import info, warning
 
 
 class BasePromptConverter(ABC):
@@ -58,27 +58,6 @@ class BasePromptConverter(ABC):
         info(f"转换完成: {len(fragments)}个提示词, 总时长{total_duration:.1f}秒")
         return instructions
 
-    def validate_instructions(self, instructions: AIVideoInstructions) -> bool:
-        """验证指令集的基本有效性"""
-        fragments = instructions.fragments
-
-        if not fragments:
-            error("指令集为空")
-            return False
-
-        # 检查提示词长度
-        for i, frag in enumerate(fragments):
-            if len(frag.prompt) > self.config.max_prompt_length:
-                warning(f"提示词{i + 1}过长: {len(frag.prompt)}字符")
-
-            if not frag.prompt.strip():
-                error(f"提示词{i + 1}为空")
-                return False
-
-            if frag.duration < 0.5 or frag.duration > 5.0:
-                warning(f"片段{i + 1}时长异常: {frag.duration}秒")
-
-        return True
 
     def _generate_base_prompt(self, fragment: VideoFragment) -> str:
         """生成基础提示词（模板方法）"""

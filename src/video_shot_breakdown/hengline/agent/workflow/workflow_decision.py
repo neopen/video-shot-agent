@@ -262,7 +262,7 @@ class PipelineDecision:
                 return PipelineState.NEEDS_REPAIR
 
         # 检查提示词长度是否过长（超过300字符）
-        long_prompts = [f for f in instructions.fragments if len(f.prompt) > state.max_prompt_length * 2]  # 允许一定的长度波动
+        long_prompts = [f for f in instructions.fragments if len(f.prompt) > state.max_prompt_length * 10]  # 允许一定的长度波动
         if long_prompts:
             if can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.CONVERT_PROMPT)

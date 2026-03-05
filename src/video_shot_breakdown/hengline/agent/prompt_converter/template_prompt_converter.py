@@ -91,8 +91,8 @@ class TemplatePromptConverter(BasePromptConverter):
         full_prompt = f"{prompt_text}, {style_hint}, high quality, 4K"
 
         # 截断到合理长度
-        if len(full_prompt) > self.config.max_prompt_length:
-            full_prompt = full_prompt[:self.config.max_prompt_length - 3] + "..."
+        # if len(full_prompt) > self.config.max_prompt_length:
+        #     full_prompt = full_prompt[:self.config.max_prompt_length - 3] + "..."
 
         # 创建提示词对象
         return AIVideoPrompt(

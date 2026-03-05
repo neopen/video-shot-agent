@@ -133,7 +133,7 @@ class WorkflowState(InputState, ScriptParsingState, ShotGeneratorState, NodeLoop
     min_shot_duration: float = 1.0
     max_fragment_duration: float = 5.0  # 每个分镜的最大持续时间（秒）
     min_fragment_duration: float = 1.0  # 最小片段时长
-    max_prompt_length: int = 1000
+    max_prompt_length: int = 200  # 最大提示词长度（字符数）
     min_prompt_length: int = 10
 
     # 人工决策
