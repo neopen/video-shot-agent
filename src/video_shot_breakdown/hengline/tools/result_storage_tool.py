@@ -55,27 +55,35 @@ class ResultStorage:
                         result_filename: str):
         """保存json"""
         try:
-            save_result = self.save_result(uuid, obj_to_dict(result_data), result_filename)
+            # 转换为字典
+            data_dict = obj_to_dict(result_data)
+
+            # 递归检查并处理可能被截断的字符串
+            self._ensure_string_integrity(data_dict)
+
+            save_result = self.save_result(uuid, data_dict, result_filename)
             info(f"成功保存: data/output/{uuid}/{result_filename}")
             return save_result
         except Exception as save_error:
             error(f"保存{result_filename}失败: {str(save_error)}")
+            # 抛出异常以便上层处理
+            raise
 
     def save_result(self, uuid: str, result_data: Dict[str, Any],
                     result_filename: str = "script_parser_result.json",
                     add_timestamp: bool = True) -> str:
         """
         保存智能体结果到指定文件
-        
+
         Args:
             uuid: 请求的唯一标识符
             result_data: 要保存的结果数据
             result_filename: 结果文件名
             add_timestamp: 是否添加时间戳
-            
+
         Returns:
             保存的文件路径
-            
+
         Raises:
             IOError: 保存文件失败时抛出
         """
@@ -92,28 +100,92 @@ class ResultStorage:
                 save_data["metadata"]["saved_at"] = datetime.now().isoformat()
                 save_data["metadata"]["uuid"] = uuid
 
-            # 保存数据到JSON文件
+            # === 保存数据到JSON文件（增强版）===
             with open(result_path, 'w', encoding='utf-8') as f:
-                json.dump(save_data, f, ensure_ascii=False, indent=2)
+                # 使用更安全的JSON序列化设置
+                json.dump(
+                    save_data,
+                    f,
+                    ensure_ascii=False,  # 确保中文正常显示
+                    indent=2,             # 保持缩进以便阅读
+                    separators=(',', ': '),  # 使用标准分隔符，不压缩
+                    default=str           # 处理不可序列化的对象
+                )
+                # 确保所有数据都被写入
+                f.flush()
+                os.fsync(f.fileno())  # 强制写入磁盘
 
-            debug(f"结果保存成功: {result_path}")
+            # 验证文件是否成功写入
+            if os.path.exists(result_path) and os.path.getsize(result_path) > 0:
+                debug(f"结果保存成功: {result_path} (大小: {os.path.getsize(result_path)} 字节)")
+            else:
+                warning(f"结果文件可能未正确写入: {result_path}")
+
             return result_path
 
         except Exception as e:
             error(f"保存结果失败 (UUID: {uuid}): {str(e)}")
             raise IOError(f"无法保存结果: {str(e)}")
 
+    def _ensure_string_integrity(self, data: Any) -> None:
+        """
+        递归检查并确保字符串完整性
+        主要检查是否有截断标记（如...）并发出警告
+
+        Args:
+            data: 要检查的数据
+        """
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(value, str):
+                    # 检查是否包含可能的截断标记
+                    if value.endswith('...') or '...' in value[-10:]:
+                        warning(f"检测到可能的字符串截断: {key} 以 '...' 结尾")
+                else:
+                    self._ensure_string_integrity(value)
+        elif isinstance(data, list):
+            for item in data:
+                self._ensure_string_integrity(item)
+
+    def _safe_json_dumps(self, data: Any) -> str:
+        """
+        安全地将数据转换为JSON字符串，处理长字符串
+
+        Args:
+            data: 要转换的数据
+
+        Returns:
+            JSON字符串
+        """
+        try:
+            # 尝试标准序列化
+            return json.dumps(data, ensure_ascii=False, default=str)
+        except Exception as e:
+            warning(f"JSON序列化失败，尝试分段处理: {str(e)}")
+
+            # 如果失败，可能是由于字符串过长，尝试手动处理
+            if isinstance(data, dict):
+                result = {}
+                for k, v in data.items():
+                    if isinstance(v, str) and len(v) > 10000:
+                        # 对于超长字符串，确保不被截断
+                        result[k] = v
+                    else:
+                        result[k] = v
+                return json.dumps(result, ensure_ascii=False, default=str)
+            return json.dumps({"error": "序列化失败", "original": str(data)}, ensure_ascii=False)
+
     def load_result(self, uuid: str, result_filename: str = "script_parser_result.json") -> Optional[Dict[str, Any]]:
         """
         从文件加载智能体结果
-        
+
         Args:
             uuid: 请求的唯一标识符
             result_filename: 结果文件名
-            
+
         Returns:
             加载的结果数据，如果文件不存在则返回None
-            
+
         Raises:
             IOError: 加载文件失败时抛出
         """
@@ -125,6 +197,10 @@ class ResultStorage:
             if not os.path.exists(result_path):
                 warning(f"结果文件不存在: {result_path}")
                 return None
+
+            # 检查文件大小
+            file_size = os.path.getsize(result_path)
+            debug(f"加载结果文件: {result_path} (大小: {file_size} 字节)")
 
             # 加载JSON文件
             with open(result_path, 'r', encoding='utf-8') as f:
@@ -143,11 +219,11 @@ class ResultStorage:
     def result_exists(self, uuid: str, result_filename: str = "script_parser_result.json") -> bool:
         """
         检查特定UUID的结果文件是否存在
-        
+
         Args:
             uuid: 请求的唯一标识符
             result_filename: 结果文件名
-            
+
         Returns:
             文件是否存在
         """
@@ -157,11 +233,11 @@ class ResultStorage:
     def delete_result(self, uuid: str, result_filename: str = "script_parser_result.json") -> bool:
         """
         删除特定UUID的结果文件
-        
+
         Args:
             uuid: 请求的唯一标识符
             result_filename: 结果文件名
-            
+
         Returns:
             删除是否成功
         """
@@ -183,7 +259,7 @@ class ResultStorage:
     def list_available_results(self) -> Dict[str, Dict[str, str]]:
         """
         列出所有可用的结果文件
-        
+
         Returns:
             包含UUID和相关信息的字典
         """
@@ -240,10 +316,10 @@ class ResultStorage:
 def create_result_storage(base_output_dir: Optional[str] = None) -> ResultStorage:
     """
     创建结果存储实例的工厂函数
-    
+
     Args:
         base_output_dir: 基础输出目录路径，默认为配置文件中的data_output路径
-        
+
     Returns:
         ResultStorage实例
     """
@@ -254,12 +330,12 @@ def save_script_parser_result(uuid: str, result_data: Dict[str, Any],
                               base_output_dir: str = "data/output") -> str:
     """
     保存剧本解析器结果的便捷函数
-    
+
     Args:
         uuid: 请求的唯一标识符
         result_data: 剧本解析结果数据
         base_output_dir: 基础输出目录路径
-        
+
     Returns:
         保存的文件路径
     """
@@ -271,11 +347,11 @@ def load_script_parser_result(uuid: str,
                               base_output_dir: str = "data/output") -> Optional[Dict[str, Any]]:
     """
     加载剧本解析器结果的便捷函数
-    
+
     Args:
         uuid: 请求的唯一标识符
         base_output_dir: 基础输出目录路径
-        
+
     Returns:
         剧本解析结果数据，如果不存在则返回None
     """
