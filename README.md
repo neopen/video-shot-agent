@@ -118,7 +118,7 @@ python main.py
 
 应用将在 `http://0.0.0.0:8000` 启动，提供API接口服务。
 
-### 4. 调用接口
+### 4. 提交任务
 
 提交任务：
 
@@ -126,37 +126,29 @@ python main.py
 curl --location --request POST 'http://localhost:8000/api/v1/storyboard' \
 --header 'Content-Type: application/json' \
 --data-raw '{
-    "script": "剧本标题：《雨中的约定》\n时长：约30秒\n场景：城市街角咖啡店外，雨天\n角色：\n- 林小雨（女，20岁，学生，抱着一本湿漉漉的书）\n- 陈阳（男，22岁，兼职外卖员，穿着黄色雨衣）\n\n[开场]\n（雨声淅沥，镜头从灰蒙蒙的天空下摇，聚焦在咖啡店外的长椅上。林小雨蹲在长椅旁，用手帕擦拭一本被雨水浸湿的诗集，神情焦急。）\n林小雨（自言自语，带着哭腔）：\n\"明明说好今天还书的……这雨下得，他会不会不来了？\"\n\n[镜头切换]\n（陈阳骑着电动车冲进雨幕，后座外卖箱里露出一角蓝色封面的书。他刹车太急，差点撞上长椅，林小雨的书掉进水洼。）\n陈阳（手忙脚乱捡书，抬头）：\n\"对不起！这书……是你的？\"\n\n[特写]\n（两本书并排躺在水洼里——林小雨的《飞鸟集》，陈阳外卖箱里的同款书，封面上贴着\"借阅卡：陈阳→林小雨\"。）\n林小雨（愣住，突然笑了）：\n\"你迟到十分钟，但……书没湿透。\"\n\n陈阳（挠头，从雨衣里掏出干毛巾裹住书）：\n\"我跑了两条街找防水袋……诗里说'\''雨是云的眼泪'\''，可我不想让你哭。\"\n\n[结尾]\n（雨渐小，阳光穿透云层。林小雨翻开书，里面夹着一张电影票根，日期是下周三。陈阳脱下雨衣罩在她头上，两人并肩跑向屋檐，笑声渐远。）\n画外音（林小雨的旁白）：\n\"有些约定，会迟到，但永远不会缺席。\"\n\n[黑屏，字幕浮现]\n\"雨会停，而故事才刚刚开始。\"\n\n风格：清新治愈，带点幽默，适合短视频平台传播。\n核心冲突：用\"湿书\"和\"迟到\"制造小误会，通过\"同款书\"和\"电影票\"暗示双向暗恋，雨天象征情感转折。"
+    "script": "深夜11点，城市公寓客厅，窗外大雨滂沱。林然裹着旧羊毛毯蜷在沙发里，电视静音播放着黑白老电影。茶几上半杯凉茶已凝出水雾，旁边摊开一本旧相册。手机突然震动，屏幕亮起“未知号码”。她盯着看了三秒，指尖悬停在接听键上方，喉头轻轻滚动。终于，她按下接听，将手机贴到耳边。电话那头沉默两秒，传来一个沙哑的男声：“是我。”  林然的手指瞬间收紧，指节泛白，呼吸停滞了一瞬。  她声音微颤：“……陈默？你还好吗？”  对方停顿片刻，低声说：“我回来了。” 林然猛地坐直，瞳孔收缩，泪水在眼眶中打转。她张了张嘴，却发不出声音，只有毛毯从肩头滑落。”"
 }'
+```
+
+
+
+### 5. 获取结果
+
+查看任务状态：
+
+```sh
+# HL202603061937129004 为任务提交成功后返回的 task_id
+curl --location --request GET 'http://localhost:8000/api/v1/status/HL202603061937129004'
 ```
 
 获取任务结果：
 
 ```sh
-# hengline202602061816441424 为任务提交成功后返回的 task_id
-curl --location --request GET 'http://localhost:8000/api/v1/result/hengline202602061816441424'
+# HL202603061937129004 为任务提交成功后返回的 task_id
+curl --location --request GET 'http://localhost:8000/api/v1/result/HL202603061937129004'
 ```
 
-查看任务状态：
-
-```sh
-# hengline202602061816441424 为任务提交成功后返回的 task_id
-curl --location --request GET 'http://localhost:8000/api/v1/status/hengline202602061816441424'
-```
-
-
-
-## 输入输出示例
-
-输入：中文剧本
-
-```json
-{
-    "script": "深夜11点，城市公寓客厅，窗外大雨滂沱。林然裹着旧羊毛毯蜷在沙发里，电视静音播放着黑白老电影。茶几上半杯凉茶已凝出水雾，旁边摊开一本旧相册。手机突然震动，屏幕亮起“未知号码”。她盯着看了三秒，指尖悬停在接听键上方，喉头轻轻滚动。终于，她按下接听，将手机贴到耳边。电话那头沉默两秒，传来一个沙哑的男声：“是我。”  林然的手指瞬间收紧，指节泛白，呼吸停滞了一瞬。  她声音微颤：“……陈默？你还好吗？”  对方停顿片刻，低声说：“我回来了。” 林然猛地坐直，瞳孔收缩，泪水在眼眶中打转。她张了张嘴，却发不出声音，只有毛毯从肩头滑落。”"
-}
-```
-
-输出：结构化分镜结果
+输出：结构化分镜结果（`audio_prompt` 为音频提示词信息）
 
 ```json
 {
@@ -178,19 +170,8 @@ curl --location --request GET 'http://localhost:8000/api/v1/status/hengline20260
         "audio_style": "cinematic",
         "voice_character": null,
         "voice_description": "ambient sound design only, no voice, pure atmospheric field recording style",
-        "speed": 1.0,
         "pitch_shift": 0.0,
         "emotion": "neutral",
-        "stability": 0.7,
-        "duration_seconds": 4.2,
-        "sound_attributes": {
-          "intensity": 0.8,
-          "reverb": 0.3
-        },
-        "format": "wav",
-        "sample_rate": 24000,
-        "seed": 8742,
-        "scene_context": "A quiet, emotionally charged apartment interior at night during heavy rain — Lin Ran sits alone, exhausted but vigilant, surrounded by memory-laden domestic objects",
         "previous_audio_id": "audio_014"
       }
     },
@@ -211,19 +192,8 @@ curl --location --request GET 'http://localhost:8000/api/v1/status/hengline20260
         "audio_style": "cinematic",
         "voice_character": null,
         "voice_description": "no voice, pure environmental atmosphere with ultra-low dynamic range and tactile silence",
-        "speed": 1.0,
         "pitch_shift": 0.0,
         "emotion": "neutral",
-        "stability": 0.7,
-        "duration_seconds": 3.0,
-        "sound_attributes": {
-          "intensity": 0.8,
-          "reverb": 0.3
-        },
-        "format": "wav",
-        "sample_rate": 24000,
-        "seed": 42719,
-        "scene_context": "urban apartment living room at night during heavy rain, character sitting still under wool blanket, silent TV glowing faintly, emotional stillness",
         "previous_audio_id": "audio_001"
       }
     },
@@ -239,9 +209,13 @@ curl --location --request GET 'http://localhost:8000/api/v1/status/hengline20260
 **安装依赖**：
 
 ```sh
-# 下载 whl 包，选择指定版本（v0.1.1-beta）
-# https://github.com/HengLine/video-shot-agent/releases/download/v0.1.1-beta/hengshot-0.1.1-py3-none-any.whl
+# 选择最新版本，下载 whl 包（https://github.com/HengLine/video-shot-agent/releases）
+# https://github.com/HengLine/video-shot-agent/releases/download/v0.1.3-beta/hengshot-0.1.3-py3-none-any.whl
+# 内部默认安装使用 ollama，如果要使用其他平台，需要安装对应的包
 pip install hengshot-0.1.1-py3-none-any.whl
+# 安装指定LLM 包
+# pip install langchain-openai	使用 openai 或 deepseek
+# pip install dashscope			使用千问
 ```
 
 **环境配置**：
@@ -253,7 +227,6 @@ pip install hengshot-0.1.1-py3-none-any.whl
 > ```properties
 > # .env - 实际配置文件
 > # ================= 应用配置 =================
-> APP__ENVIRONMENT=production
 > APP__LANGUAGE=zh
 > 
 > # ================= LLM默认配置 =================
@@ -271,6 +244,9 @@ pip install hengshot-0.1.1-py3-none-any.whl
 ### 1. 作为Python库使用
 
 ```python
+from hengshot.hengline import generate_storyboard
+from hengshot.hengline.hengline_config import HengLineConfig
+
 async def basic_usage():
     """基础用法示例"""
     script = """
@@ -304,6 +280,9 @@ async def basic_usage():
 可以通过 HTTP API 将剧本分镜智能体集成到各种 Web 应用中：
 
 ```python
+from hengshot.hengline import generate_storyboard
+from hengshot.hengline.hengline_config import HengLineConfig
+
 @app.post("/api/generate-storyboard")
 async def generate_storyboard_endpoint(script_text: str):
     """
@@ -330,118 +309,19 @@ async def generate_storyboard_endpoint(script_text: str):
 
 ### 3. 集成到LangGraph节点
 
-可以将剧本分镜智能体作为 LangGraph 工作流中的一个节点：
+可以将剧本分镜智能体作为 LangGraph 工作流中的一个节点。
 
-```python
-# 定义状态结构
-class StoryboardState(BaseModel):
-    script_text: str = Field(description="输入剧本文本")
-    task_id: str = Field(default=None, description="任务ID")
-    storyboard_result: Dict[str, Any] = Field(default=None, description="分镜生成结果")
-    next_step: str = Field(default="", description="下一步操作指示")
+使用方式：[剧本分镜智能体架构设计与实现 | 集成到 LangGraph 节点](https://pengline.github.io/2025/10/0194020a663c408fb500dd7532349519/)
 
 
-# 创建分镜生成节点
-async def storyboard_generator_node(state: StoryboardState) -> Dict[str, Any]:
-    """
-    LangGraph 工作流中的分镜生成节点
-    """
-    try:
-        result = await generate_storyboard(
-            script_text=state.script_text,
-            task_id=state.task_id
-        )
-
-        return {
-            "storyboard_result": result,
-            "next_step": "storyboard_generated"
-        }
-    except Exception as e:
-        return {
-            "storyboard_result": {"error": str(e)},
-            "next_step": "error"
-        }
-
-
-# 构建工作流示例
-def create_storyboard_workflow():
-    workflow = StateGraph(StoryboardState)
-
-    # 添加节点
-    workflow.add_node("generate_storyboard", storyboard_generator_node)
-
-    # 设置入口点
-    workflow.set_entry_point("generate_storyboard")
-    workflow.add_edge("generate_storyboard", END)
-
-    return workflow.compile()
-
-
-# 使用示例
-async def run_langgraph_example():
-    app = create_storyboard_workflow()
-
-    # 初始化状态
-    initial_state = StoryboardState(
-        script_text="一个男孩在公园里放风筝，天空很蓝...",
-        task_id="storyboard_task_001"
-    )
-
-    # 运行工作流
-    final_state = await app.ainvoke(initial_state)
-
-    return final_state
-```
 
 ### 4. 集成到A2A系统
 
-将剧本分镜智能体集成到Agent-to-Agent协作系统中：
+将剧本分镜智能体集成到Agent-to-Agent协作系统中。
 
 如：上游是剧本创作智能体，下游是 文生视频+剪辑 智能。
 
-```python
-@dataclass
-class A2ATask:
-    """A2A任务数据类"""
-    task_id: str
-    script_content: str
-    priority: int = 1
-    metadata: Dict[str, Any] = None
-
-
-class StoryboardA2AAgent:
-    """分镜生成的A2A代理"""
-
-    def __init__(self, agent_id: str):
-        self.agent_id = agent_id
-        self.task_queue = []
-
-    async def process_task(self, task: A2ATask) -> Dict[str, Any]:
-        """
-        处理A2A任务
-        """
-        try:
-            # 调用分镜生成智能体
-            result = await generate_storyboard(
-                script_text=task.script_content,
-                task_id=task.task_id
-            )
-
-            return {
-                "agent_id": self.agent_id,
-                "task_id": task.task_id,
-                "status": "completed",
-                "result": result,
-                "metadata": task.metadata or {}
-            }
-        except Exception as e:
-            return {
-                "agent_id": self.agent_id,
-                "task_id": task.task_id,
-                "status": "failed",
-                "error": str(e)
-            }
-```
+使用方式：[剧本分镜智能体架构设计与实现 | 集成到 A2A 系统](https://pengline.github.io/2025/10/0194020a663c408fb500dd7532349519/)
 
 
 
