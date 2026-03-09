@@ -46,20 +46,6 @@ class CorrectionRecord:
         }
 
 
-class EmotionType(str, Enum):
-    """情绪类型枚举"""
-    NEUTRAL = "neutral"
-    HAPPY = "happy"
-    SAD = "sad"
-    ANGRY = "angry"
-    TENSE = "tense"
-    EXCITED = "excited"
-    CALM = "calm"
-    HESITANT = "hesitant"
-    CRYING = "crying"
-    WHISPER = "whisper"
-
-
 class IntensityLevel(str, Enum):
     """强度级别枚举"""
     VERY_LOW = "very_low"

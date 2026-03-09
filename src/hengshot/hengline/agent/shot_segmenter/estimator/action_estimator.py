@@ -7,7 +7,7 @@
 """
 from typing import Dict, Any
 
-from hengshot.hengline.agent.script_parser.script_parser_models import ParsedScript, CharacterType
+from hengshot.hengline.agent.script_parser.script_parser_models import ParsedScript, CharacterType, EmotionType
 from hengshot.hengline.agent.shot_segmenter.estimator.base_estimator import BaseDurationEstimator
 from hengshot.hengline.agent.shot_segmenter.estimator.estimator_models import IntensityLevel
 from hengshot.hengline.agent.shot_segmenter.shot_segmenter_models import ShotInfo, ShotType
@@ -87,10 +87,10 @@ class ActionDurationEstimator(BaseDurationEstimator):
             base_duration *= 1.3  # 慢速动作
 
         # 4. 场景情绪调整
-        scene_mood = self._get_scene_mood(shot, script)
-        if scene_mood in ["紧张", "激烈"]:
+        scene_mood = shot.emotion
+        if scene_mood in [EmotionType.TENSE, EmotionType.ANXIOUS]:
             base_duration *= 0.9  # 紧张场景节奏快
-        elif scene_mood in ["悲伤", "压抑"]:
+        elif scene_mood in [EmotionType.SAD, EmotionType.CHOKING]:
             base_duration *= 1.2  # 悲伤场景节奏慢
 
         # 5. 角色特征调整

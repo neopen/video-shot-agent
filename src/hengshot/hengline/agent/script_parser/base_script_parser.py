@@ -11,7 +11,7 @@ from typing import Dict, Any, List
 
 from hengshot.hengline.agent.base_models import ScriptType, ElementType
 from hengshot.hengline.agent.script_parser.script_parser_models import ParsedScript, SceneInfo, CharacterInfo, BaseElement, \
-    GlobalMetadata, PropItem, CharacterOutfit, LocationItem, ElementAudioContext, SceneAudioContext, EnvironmentSound
+    GlobalMetadata, PropItem, CharacterOutfit, LocationItem, ElementAudioContext, SceneAudioContext, EnvironmentSound, CharacterType, EmotionType
 from hengshot.hengline.tools.script_assessor_tool import ComplexityAssessor
 from hengshot.logger import info, warning
 
@@ -118,6 +118,7 @@ class BaseScriptParser(ABC):
             CharacterInfo(
                 name=char_data["name"],
                 gender=char_data["gender"],
+                type=CharacterType(char_data.get("type", "default")),
                 role=char_data["role"],
                 description=char_data.get("description"),
                 key_traits=char_data.get("key_traits", [])
@@ -170,7 +171,7 @@ class BaseScriptParser(ABC):
             target_character=elem_data.get("target_character"),
             description=elem_data.get("description", ""),
             intensity=elem_data.get("intensity", 0.5),
-            emotion=elem_data.get("emotion", "neutral"),
+            emotion=EmotionType(elem_data.get("emotion", "neutral")),
             audio_context=element_audio_context,
         )
 

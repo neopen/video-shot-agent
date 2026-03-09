@@ -7,6 +7,7 @@
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional, Dict, Any, Literal
 
 from pydantic import BaseModel, Field
@@ -41,6 +42,31 @@ class ElementAudioContext(BaseModel):
 
 
 # ========================= 基础模型定义 - 包含剧本元素、角色信息、场景信息等核心数据结构 ==================
+class EmotionType(str, Enum):
+    """情绪类型枚举
+    neutral/happy/sad/angry/tense/fear/surprise/disgust/anxious/excited/calm/tender/hesitant/crying/whisper/choking/repression/emotional/other
+    """
+    NEUTRAL = "neutral"     # 中性的情绪，适用于大多数场景
+    HAPPY = "happy"         # 快乐的情绪，适用于喜剧、成功等场景
+    SAD = "sad"             # 悲伤的情绪，适用于悲剧、失落等场景
+    FEAR = "fear"           # 恐惧的情绪，适用于惊悚、恐怖等场景
+    ANGRY = "angry"         # 愤怒的情绪，适用于冲突、争吵等场景
+    TENSE = "tense"         # 紧张的情绪，适用于悬疑、惊悚等场景
+    SURPRISE = "surprise"   # 惊讶的情绪，适用于突发事件、意外发现等场景
+    DISGUST = "disgust"     # 厌恶的情绪，适用于反派角色、恶心场景等
+    ANXIOUS = "anxious"     # 焦虑的情绪，适用于角色内心挣扎、压力大的场景
+    EXCITED = "excited"     # 兴奋的情绪，适用于喜庆、成功等场景
+    CALM = "calm"           # 平静的情绪，适用于安静、温馨等场景
+    TENDER = "tender"       # 温柔的情绪，适用于亲密、感人等场景
+    HESITANT = "hesitant"   # 犹豫的情绪，适用于角色面临选择、内心矛盾等场景
+    CRYING = "crying"       # 哭泣的情绪，适用于悲伤、痛苦等场景
+    EMOTIONAL = "emotional"   # 激动的情绪，适用于情绪波动较大的场景
+    WHISPER = "whisper"     # 低语的情绪，适用于秘密、亲密等场景
+    CHOKING = "choking"     # 哽咽的情绪，适用于极度悲伤、痛苦的场景
+    REPRESSION = "repression"   # 压抑的情绪，适用于内心挣扎、无法表达的情感状态
+    OTHER = "other"
+
+
 class BaseElement(BaseModel):
     """剧本元素基类 - 所有类型元素的共同字段"""
     id: str = Field(..., description="元素唯一标识，格式：elem_001")
@@ -89,19 +115,31 @@ class BaseElement(BaseModel):
         le=1.0,
         description="动作或语气等的强度等级，0-1之间"
     )
-    emotion: str = Field(
-        default="neutral",
+    emotion: EmotionType = Field(
+        default=EmotionType.NEUTRAL,
         description="伴随情绪：neutral/happy/angry/sad/fear"
     )
     # 元素音频上下文
     audio_context: Optional[ElementAudioContext] = Field(None, description="元素音频上下文")
 
 
+# ========================= 角色和场景信息模型 - 包含角色类型、场景描述等关键信息 =========================
+class CharacterType(str, Enum):
+    """角色类型枚举"""
+    DEFAULT = "default"
+    CHILD = "child"
+    ADULT = "adult"
+    ELDER = "elder"
+    INJURED = "injured"
+    ATHLETE = "athlete"
+    ROBOT = "robot"
+
 class CharacterInfo(BaseModel):
     """角色信息模型"""
     name: str = Field(..., description="角色名称")
     gender: str = Field(..., description="角色性别")
     role: str = Field(..., description="角色类型（主角、配角等）")
+    type: CharacterType = Field(default=CharacterType.DEFAULT, description="角色类型")
     # 核心特征（可选）
     description: Optional[str] = Field(
         default=None,

@@ -7,7 +7,7 @@
 """
 import re
 
-from hengshot.hengline.agent.script_parser.script_parser_models import ParsedScript, CharacterType
+from hengshot.hengline.agent.script_parser.script_parser_models import ParsedScript, CharacterType, EmotionType
 from hengshot.hengline.agent.shot_segmenter.estimator.base_estimator import BaseDurationEstimator
 from hengshot.hengline.agent.shot_segmenter.shot_segmenter_models import ShotInfo, ShotType
 from hengshot.logger import debug
@@ -94,8 +94,7 @@ class DialogueDurationEstimator(BaseDurationEstimator):
             return baseline["min"]
 
         # 3. 确定语速
-        scene_mood = self._get_scene_mood(shot, script)
-        speed_key = self.emotion_speed.get(scene_mood, "normal")
+        speed_key = self.emotion_speed.get(shot.emotion, "normal")
         speech_rate = self.speech_rates[speed_key]
 
         # 4. 基础时长 = 字数 / 语速
@@ -105,8 +104,8 @@ class DialogueDurationEstimator(BaseDurationEstimator):
         pause_time = self._calculate_pause_time(dialogue_text)
         base_duration += pause_time
 
-        # 6. 情感镜头调整
-        if scene_mood in ["悲伤", "激动"] and shot.shot_type == ShotType.CLOSE_UP:
+        # 6. 情感镜头调整("悲伤", "激动")
+        if shot.emotion in [EmotionType.SAD, EmotionType.EMOTIONAL] and shot.shot_type == ShotType.CLOSE_UP:
             base_duration *= 1.3
 
         # 7. 角色特征调整

@@ -103,6 +103,16 @@ class SceneDurationEstimator(BaseDurationEstimator):
 
         return self._clamp_duration(base_duration, baseline["min"], baseline["max"])
 
+
+    def _get_scene_mood(self, shot: ShotInfo, script: ParsedScript) -> str:
+        """获取场景情绪"""
+        for scene in script.scenes:
+            if scene.id == shot.scene_id:
+                if scene.audio_context:
+                    return scene.audio_context.atmosphere
+        return "neutral"
+
+
     def _detect_time(self, description: str) -> str:
         """检测时间"""
         time_keywords = {

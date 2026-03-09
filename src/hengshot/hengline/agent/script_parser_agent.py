@@ -62,7 +62,8 @@ class ScriptParserAgent:
 
         # 步骤4：质量评估
         completeness_score, warnings = self._evaluate_completeness(parsed_script, script_text)
-        warning(f"评估解析质量：{warnings}")
+        if warnings:
+            warning(f"评估解析质量：{warnings}")
 
         # 步骤5：设置解析置信度
         parsing_confidence = self._calculate_confidence(parsed_script)

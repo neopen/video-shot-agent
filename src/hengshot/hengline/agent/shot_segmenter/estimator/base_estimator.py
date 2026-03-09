@@ -9,7 +9,7 @@ import re
 from abc import abstractmethod
 from typing import Dict, List, Optional
 
-from hengshot.hengline.agent.script_parser.script_parser_models import ParsedScript, CharacterType
+from hengshot.hengline.agent.script_parser.script_parser_models import ParsedScript, CharacterType, EmotionType
 from hengshot.hengline.agent.shot_segmenter.shot_segmenter_models import ShotInfo, ShotSequence, ShotType
 
 
@@ -100,13 +100,6 @@ class BaseDurationEstimator:
 
         return stats
 
-    def _get_scene_mood(self, shot: ShotInfo, script: ParsedScript) -> str:
-        """获取场景情绪"""
-        for scene in script.scenes:
-            if scene.id == shot.scene_id:
-                if scene.audio_context:
-                    return scene.audio_context.atmosphere
-        return "neutral"
 
     def _get_scene_location(self, shot: ShotInfo, script: ParsedScript) -> str:
         """获取场景地点"""

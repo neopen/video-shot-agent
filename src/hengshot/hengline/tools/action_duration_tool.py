@@ -11,8 +11,8 @@ from typing import Dict, Any, List
 
 import jieba
 
-from hengshot.hengline.agent.script_parser.script_parser_models import CharacterType
-from hengshot.hengline.agent.shot_segmenter.estimator.estimator_models import IntensityLevel, EmotionType
+from hengshot.hengline.agent.script_parser.script_parser_models import CharacterType, EmotionType
+from hengshot.hengline.agent.shot_segmenter.estimator.estimator_models import IntensityLevel
 from hengshot.hengline.config.action_duration_config import action_config
 from hengshot.logger import debug, warning
 

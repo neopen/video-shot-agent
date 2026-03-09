@@ -9,7 +9,7 @@ import json
 from typing import Optional, List
 
 from hengshot.hengline.agent.base_agent import BaseAgent
-from hengshot.hengline.agent.script_parser.script_parser_models import ParsedScript, SceneInfo, GlobalMetadata
+from hengshot.hengline.agent.script_parser.script_parser_models import ParsedScript, SceneInfo, GlobalMetadata, EmotionType
 from hengshot.hengline.agent.shot_segmenter.base_shot_segmenter import BaseShotSegmenter
 from hengshot.hengline.agent.shot_segmenter.rule_shot_segmenter import RuleShotSegmenter
 from hengshot.hengline.agent.shot_segmenter.shot_segmenter_models import ShotSequence, ShotInfo, ShotType
@@ -73,7 +73,7 @@ class LLMShotSegmenter(BaseShotSegmenter, BaseAgent):
 
         # 准备元素列表文本
         elements_list = "\n".join([
-            f"{elem.id}. [{elem.type}] {elem.character or '场景'}: {elem.content} (时长: {elem.duration}秒)"
+            f"{elem.id}. [{elem.type}] {elem.character or '场景'}, {elem.emotion}: {elem.content} (时长: {elem.duration}秒)"
             for i, elem in enumerate(scene.elements)
         ])
 
@@ -114,6 +114,7 @@ class LLMShotSegmenter(BaseShotSegmenter, BaseAgent):
                 description=shot_data.get("description", ""),
                 start_time=round(current_time, 2),
                 duration=shot_data.get("duration", 3.0),
+                emotion=EmotionType(shot_data.get("emotion", "neutral")),
                 shot_type=ShotType(shot_data.get("shot_type", "medium_shot")),
                 main_character=shot_data.get("main_character"),
                 element_ids=shot_data.get("element_ids", []),

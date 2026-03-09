@@ -12,6 +12,8 @@ from typing import List, Optional, Dict, Any
 
 from pydantic import BaseModel, Field
 
+from hengshot.hengline.agent.script_parser.script_parser_models import EmotionType
+
 
 class ShotType(str, Enum):
     """MVP镜头类型（简化）"""
@@ -34,6 +36,12 @@ class ShotInfo(BaseModel):
 
     # 基础关联信息
     scene_id: str = Field(..., description="所属场景ID")
+
+    # 情绪信息（简化）
+    emotion: EmotionType = Field(
+        default=EmotionType.NEUTRAL,
+        description="伴随情绪：neutral/happy/angry/sad/fear"
+    )
 
     # 内容描述
     description: str = Field(..., description="镜头内容简洁描述")
