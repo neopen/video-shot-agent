@@ -78,7 +78,7 @@ class NeopenApp(AppBaseEnv):
 
             # 输出启动信息
             debug(f"服务器配置: host={host}, port={port}, reload={reload}, workers={workers}")
-            info(f"提示: 按 Ctrl+C 可以停止服务器")
+            info(f"服务启动成功: 可以按 Ctrl+C 停止服务器")
 
             # 检查应用文件路径是否正确
             # 注意：这里使用字符串路径而不是检查文件存在，因为uvicorn会解析模块路径

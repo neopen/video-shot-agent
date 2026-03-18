@@ -129,7 +129,7 @@ class DotEnvLoader:
 
         info(f"找到 {len(dotenv_files)} 个 .env 文件:")
         for i, path in enumerate(dotenv_files, 1):
-            info(f"   {i}. {path}")
+            debug(f"   {i}. {path}")
 
         # 按优先级加载（从高到低）
         for path in dotenv_files:

@@ -25,4 +25,6 @@ requests
 tiktoken
 # python-multipart  # 用于FastAPI文件上传支持
 httpx             # 用于异步HTTP请求
+# pip install git+https://github.com/fxsjy/jieba.git@master
+# git -c http.proxy=http://127.0.0.1:7890 clone https://github.com/fxsjy/jieba.git
 jieba

@@ -10,7 +10,7 @@ from typing import Optional, Any
 
 import redis
 
-from penshot.logger import info, error
+from penshot.logger import info, error, debug
 
 
 class RedisClient:
@@ -126,7 +126,7 @@ class RedisClient:
 
             # 测试连接
             self.client.ping()
-            info(f"Redis连接成功: {self.connection_url}")
+            debug(f"Redis连接成功: {self.connection_url}")
 
         except redis.ConnectionError as e:
             error(f"Redis连接失败: {e}")
