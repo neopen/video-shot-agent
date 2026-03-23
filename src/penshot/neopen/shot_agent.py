@@ -26,13 +26,14 @@ async def generate_storyboard(
     Args:
         script_text: 用户输入的中文剧本（自然语言）
         task_id: 任务ID，用于关联多次调用。 同一个剧本任务ID应该一致
+        language: 语言
         config: 可选的LLM实例，如果不提供，将自动初始化（需要配置env参数）
 
     Returns:
         包含分镜列表的完整结果
     """
     # 创建并运行多智能体管道
-    set_language(language.value)
+    set_language(language)
     workflow = MultiAgentPipeline(config=config, task_id=task_id)
     return await  workflow.run_process(
         raw_script=script_text,

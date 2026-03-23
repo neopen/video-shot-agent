@@ -30,7 +30,7 @@ DotEnvLoader().load()
 
 class LLMProviderConfig(BaseModel):
     """LLM提供商配置"""
-    base_url: str = Field(default="https://api.openai.com/v1")
+    base_url: str = Field(default="")   # https://api.openai.com/v1
     api_key: SecretStr = Field(default=SecretStr(""))
     model_name: str = Field(default="gpt-4o")
     timeout: int = Field(default=60, ge=1)
@@ -57,7 +57,7 @@ class LLMProviderConfig(BaseModel):
 
 class EmbeddingProviderConfig(BaseModel):
     """嵌入模型提供商配置"""
-    base_url: str = Field(default="https://api.openai.com/v1")
+    base_url: str = Field(default="")   # https://api.openai.com/v1
     api_key: SecretStr = Field(default=SecretStr(""))
     model_name: str = Field(default="text-embedding-3-small")
     device: str = Field(default="gpu")

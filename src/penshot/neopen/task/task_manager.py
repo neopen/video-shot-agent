@@ -224,7 +224,7 @@ class TaskManager:
                 except Exception:
                     pass
             rec["updated_at"] = datetime.now(timezone.utc).isoformat()
-            self.redis.set(key, json.dumps(rec, ensure_ascii=False))
+            self.redis.set(key, json.dumps(obj_to_dict(rec), ensure_ascii=False))
         else:
             with self._lock:
                 if task_id not in self._local_tasks:
@@ -307,7 +307,7 @@ class TaskManager:
             rec["error"] = result.get("error")
             rec["updated_at"] = datetime.now(timezone.utc).isoformat()
             rec["completed_at"] = datetime.now(timezone.utc).isoformat()
-            self.redis.set(key, json.dumps(rec, ensure_ascii=False))
+            self.redis.set(key, json.dumps(obj_to_dict(rec), ensure_ascii=False))
             try:
                 if result.get("success", False):
                     self.redis.incr(self._redis_metrics_key("completed"))
@@ -344,7 +344,7 @@ class TaskManager:
             rec["status"] = "failed"
             rec["error"] = error_message
             rec["updated_at"] = datetime.now(timezone.utc).isoformat()
-            self.redis.set(key, json.dumps(rec, ensure_ascii=False))
+            self.redis.set(key, json.dumps(obj_to_dict(rec), ensure_ascii=False))
             try:
                 self.redis.incr(self._redis_metrics_key("failed"))
             except Exception:
@@ -554,7 +554,7 @@ class TaskManager:
             rec["callback_url"] = callback_url
             rec["updated_at"] = datetime.now(timezone.utc).isoformat()
             try:
-                self.redis.set(key, json.dumps(rec, ensure_ascii=False))
+                self.redis.set(key, json.dumps(obj_to_dict(rec), ensure_ascii=False))
                 return True
             except Exception:
                 return False

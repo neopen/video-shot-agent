@@ -12,7 +12,7 @@ from typing import Optional
 from penshot.logger import error
 
 
-class Language(Enum):
+class Language(str, Enum):
     """
     语言枚举类，统一管理语言标识
     """
@@ -58,14 +58,15 @@ def _init_language_from_env():
             error(f'初始化语言设置失败，使用默认值{Language.ZH.value}：{e}')
 
 
-def set_language(lang: str) -> bool:
+def set_language(lang: Language) -> bool:
     """
     设置当前语言
     :param lang: 语言字符串，支持'zh', 'en', '中文', '英文'
     :return: 设置成功返回True，失败返回False
     """
     global _current_language
-    lang_enum = Language.from_string(lang)
+    # lang_enum = Language.from_string(lang)
+    lang_enum = lang
     if lang_enum:
         _current_language = lang_enum
         return True

@@ -32,11 +32,11 @@ class ProcessRequest(BaseModel):
     config: Optional[ShotConfig] = Field(default_factory=ShotConfig, description="处理配置（序列化形式）")
     callback_url: Optional[str] = Field(default=None, description="回调URL，处理完成后通知（可选）")
     task_id: str = Field(default_factory=_generate_task_id, description="外部请求ID（可选）")
-    language: str = Field(default=Language.ZH.value, description='剧本语言，例如 "zh" 或 "en"')
+    language: Language = Field(default=Language.ZH, description='剧本语言，例如 "zh" 或 "en"')
 
     @field_validator("language")
     def validate_language(cls, v):
-        if v not in {Language.ZH.value, Language.EN.value}:
+        if v not in {Language.ZH, Language.EN}:
             raise ValueError("language must be one of: 'zh', 'en'")
         return v
 
@@ -71,6 +71,13 @@ class BatchProcessRequest(BaseModel):
     scripts: List[str] = Field(..., description="剧本列表")
     config: Optional[Dict[str, Any]] = Field(default_factory=dict)
     batch_id: Optional[str] = None
+    language: Language = Field(default=Language.ZH, description='剧本语言，例如 "zh" 或 "en"')
+
+    @field_validator("language")
+    def validate_language(cls, v):
+        if v not in {Language.ZH, Language.EN}:
+            raise ValueError("language must be one of: 'zh', 'en'")
+        return v
 
     @field_validator("scripts")
     def validate_scripts_length(cls, v):
