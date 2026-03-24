@@ -146,7 +146,7 @@ video_splitter_user:
               "continuity_hints": ["借阅卡文字清晰", "眼神方向一致"]
             }}
           ],
-          "continuity_plan": {
+          "continuity_plan": {{
             "character_consistency": "明黄雨衣颜色一致，眼神方向连贯",
             "scene_consistency": "水渍范围自然衔接",
             "transition_suggestions": ["0.3秒光学模糊转场", "声音留白0.2秒"]
