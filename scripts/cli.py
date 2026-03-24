@@ -22,6 +22,7 @@ import time
 from typing import Dict
 
 from penshot.api import PenshotFunction, Language, __version__
+from penshot.neopen.task.task_models import TaskStatus
 
 
 class Colors:
@@ -138,19 +139,19 @@ def wait_for_task_with_progress(
             print(f"\r{bar} {progress:.1f}%", end="", flush=True)
             last_progress = progress
 
-        if status == "completed":
+        if status == "completed" or status == TaskStatus.SUCCESS:
             print()  # 换行
             print_success(f"任务完成！耗时: {format_duration(time.time() - start_time)}")
             result = agent.get_task_result(task_id)
             return {"success": True, "result": result}
 
-        if status == "failed":
+        if status == "failed" or status == TaskStatus.FAILED:
             print()  # 换行
             error_msg = task.get("error", "未知错误")
             print_error(f"任务失败: {error_msg}")
             return {"success": False, "error": error_msg}
 
-        if status == "cancelled":
+        if status == "cancelled" or status == TaskStatus.CANCELLED:
             print()  # 换行
             print_warning("任务已取消")
             return {"success": False, "error": "任务已取消"}
@@ -176,7 +177,7 @@ def cmd_breakdown(args):
 
     # 创建智能体
     language = Language.ZH if args.language == "zh" else Language.EN
-    agent = PenshotFunction(language=language)
+    agent = PenshotFunction(language=language, max_concurrent=5)
 
     # 执行分镜
     print_info("正在处理...")
@@ -203,7 +204,7 @@ def cmd_breakdown(args):
                 "success": True,
                 "shots_count": stats.get("shot_count", len(shots)),
                 "total_duration": stats.get("total_duration", 0),
-                "shots": shots[:10] if args.verbose else shots[:3],  # 预览
+                "shots": shots[:10] if args.verbose else shots[:3],
                 "full_result": data if args.verbose else None
             }
 
@@ -212,7 +213,8 @@ def cmd_breakdown(args):
             else:
                 print("\n预览 (前3个镜头):")
                 for i, shot in enumerate(shots[:3], 1):
-                    print(f"  {i}. {shot.get('description', '无描述')[:80]}...")
+                    desc = shot.get('description', '无描述')
+                    print(f"  {i}. {desc[:80]}..." if len(desc) > 80 else f"  {i}. {desc}")
 
                 if args.verbose:
                     print("\n完整结果:")
@@ -239,7 +241,7 @@ def cmd_breakdown(args):
 
 def cmd_status(args):
     """查询任务状态"""
-    agent = PenshotFunction()
+    agent = PenshotFunction(max_concurrent=5)
     task = agent.get_task_status(args.task_id)
 
     if not task:
@@ -265,22 +267,22 @@ def cmd_status(args):
     if updated_at:
         print(f"更新时间: {updated_at}")
 
-    if status == "failed":
+    if status in ["failed", TaskStatus.FAILED]:
         error_msg = task.get("error")
         if error_msg:
             print_error(f"错误: {error_msg}")
 
-    if status == "completed":
+    if status in ["completed", TaskStatus.SUCCESS]:
         print_success("任务已完成")
-    elif status == "processing":
+    elif status in ["processing", TaskStatus.PROCESSING]:
         print_info("任务处理中")
-    elif status == "pending":
+    elif status in ["pending", TaskStatus.PENDING]:
         print_info("任务等待中")
 
 
 def cmd_result(args):
     """获取任务结果"""
-    agent = PenshotFunction()
+    agent = PenshotFunction(max_concurrent=5)
     result = agent.get_task_result(args.task_id)
 
     if not result:
@@ -320,7 +322,7 @@ def cmd_result(args):
 
 def cmd_cancel(args):
     """取消任务"""
-    agent = PenshotFunction()
+    agent = PenshotFunction(max_concurrent=5)
     success = agent.cancel_task(args.task_id)
 
     if success:
@@ -336,11 +338,18 @@ def cmd_batch(args):
     # 读取剧本列表
     scripts = []
     if args.file:
-        with open(args.file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    scripts.append(line)
+        try:
+            with open(args.file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        scripts.append(line)
+        except FileNotFoundError:
+            print_error(f"文件不存在: {args.file}")
+            sys.exit(1)
+        except Exception as e:
+            print_error(f"读取文件失败: {str(e)}")
+            sys.exit(1)
     elif args.scripts:
         scripts = args.scripts
     else:
@@ -350,7 +359,7 @@ def cmd_batch(args):
     print_info(f"批量处理 {len(scripts)} 个剧本")
 
     language = Language.ZH if args.language == "zh" else Language.EN
-    agent = PenshotFunction(language=language)
+    agent = PenshotFunction(language=language, max_concurrent=5)
 
     # 执行批量处理
     if args.sync:
@@ -416,6 +425,9 @@ def cmd_serve(args):
     except KeyboardInterrupt:
         print("\n")
         print_warning("服务器已停止")
+    except ImportError as e:
+        print_error(f"导入 MCP 模块失败: {str(e)}")
+        sys.exit(1)
     except Exception as e:
         print_error(f"启动失败: {str(e)}")
         sys.exit(1)
@@ -428,14 +440,51 @@ def cmd_serve_rest(args):
     print_info("按 Ctrl+C 停止")
 
     try:
-        from penshot.api.rest_server import run_rest_server
-        run_rest_server(host=args.host, port=args.port)
+        # 导入并启动 FastAPI 应用
+        from penshot.app import app
+        import uvicorn
+
+        # 配置 uvicorn 服务器
+        uvicorn.run(
+            app,
+            host=args.host,
+            port=args.port,
+            reload=False,
+            log_level="info",
+            access_log=True
+        )
     except KeyboardInterrupt:
         print("\n")
         print_warning("服务器已停止")
+    except ImportError as e:
+        print_error(f"导入 FastAPI 模块失败: {str(e)}")
+        print_info("请确保已安装 fastapi 和 uvicorn")
+        sys.exit(1)
     except Exception as e:
         print_error(f"启动失败: {str(e)}")
         sys.exit(1)
+
+
+def cmd_queue_status(args):
+    """查看队列状态"""
+    agent = PenshotFunction(max_concurrent=5)
+    queue_status = agent.get_queue_status()
+    stats = agent.get_stats()
+
+    print_header("Penshot - 队列状态")
+    print(f"\n队列状态:")
+    print(f"  队列长度: {queue_status.get('queue_length', 0)}")
+    print(f"  等待任务数: {queue_status.get('queue_waiting', 0)}")
+    print(f"  活跃任务数: {queue_status.get('active_tasks', 0)}")
+    print(f"  最大并发数: {queue_status.get('max_concurrent', 0)}")
+    print(f"  队列使用率: {queue_status.get('queue_usage_percent', 0):.1f}%")
+
+    print(f"\n统计信息:")
+    print(f"  总提交: {stats.get('total_submitted', 0)}")
+    print(f"  已完成: {stats.get('total_completed', 0)}")
+    print(f"  失败: {stats.get('total_failed', 0)}")
+    print(f"  已取消: {stats.get('total_cancelled', 0)}")
+    print(f"  平均等待时间: {stats.get('avg_wait_time_ms', 0):.0f}ms")
 
 
 def cmd_version(args):
@@ -459,6 +508,7 @@ def create_parser() -> argparse.ArgumentParser:
   penshot cancel <task_id>
   penshot batch -f scripts.txt --sync
   penshot serve-rest --port 8080
+  penshot queue-status
         """
     )
 
@@ -507,6 +557,9 @@ def create_parser() -> argparse.ArgumentParser:
     batch_parser.add_argument('--wait', action='store_true', help='异步模式等待完成')
     batch_parser.add_argument('--timeout', type=float, default=600, help='超时时间（秒）')
 
+    # queue-status 命令
+    queue_parser = subparsers.add_parser('queue-status', help='查看队列状态')
+
     # serve 命令
     serve_parser = subparsers.add_parser('serve', help='启动 MCP 服务器')
 
@@ -540,6 +593,7 @@ def main():
         'result': cmd_result,
         'cancel': cmd_cancel,
         'batch': cmd_batch,
+        'queue-status': cmd_queue_status,
         'serve': cmd_serve,
         'serve-rest': cmd_serve_rest,
     }
