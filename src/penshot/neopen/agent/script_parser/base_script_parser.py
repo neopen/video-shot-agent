@@ -11,6 +11,7 @@ from typing import Dict, Any, List
 
 from penshot.logger import info, warning
 from penshot.neopen.agent.base_models import ScriptType, ElementType
+from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityRepairParams
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript, SceneInfo, CharacterInfo, BaseElement, \
     GlobalMetadata, PropItem, CharacterOutfit, LocationItem, ElementAudioContext, SceneAudioContext, EnvironmentSound, CharacterType
 from penshot.neopen.tools.script_assessor_tool import ComplexityAssessor
@@ -26,7 +27,7 @@ class BaseScriptParser(ABC):
         self.complexity_assessor = ComplexityAssessor()
 
     @abstractmethod
-    def parser(self, script_text: Any, script_format: ScriptType, repair_params: Dict[str, Any] = None) -> ParsedScript:
+    def parser(self, script_text: Any, script_format: ScriptType, repair_params: QualityRepairParams = None) -> ParsedScript:
         """处理输入数据（子类实现）"""
         raise NotImplementedError("子类必须实现process方法")
 

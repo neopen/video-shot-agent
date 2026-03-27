@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 
 from penshot.neopen.agent.base_agent import BaseAgent
 from penshot.neopen.agent.base_models import ScriptType
+from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityRepairParams
 from penshot.neopen.agent.script_parser.base_script_parser import BaseScriptParser
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript
 from penshot.neopen.client.client_config import AIConfig
@@ -38,7 +39,7 @@ class LLMScriptParser(BaseScriptParser, BaseAgent):
             "default": self._get_default_prompt()
         }
 
-    def parser(self, script_text: Any, script_format: ScriptType, repair_params: Dict[str, Any] = None) -> Optional[ParsedScript]:
+    def parser(self, script_text: Any, script_format: ScriptType, repair_params: QualityRepairParams = None) -> Optional[ParsedScript]:
 
         """
         优化版剧本解析函数
@@ -61,8 +62,8 @@ class LLMScriptParser(BaseScriptParser, BaseAgent):
         prompt_template = self._build_user_prompt(script_text, script_format)
 
         if repair_params:
-            issue_types = repair_params.get('issue_types', [])
-            suggestions = repair_params.get('suggestions', {})
+            issue_types = repair_params.issue_types
+            suggestions = repair_params.suggestions
             user_prompt = prompt_template.format(script_text=script_text, issue_types=', '.join(issue_types), suggestions=suggestions)
         else:
             user_prompt = prompt_template.format(script_text=script_text, issue_types="", suggestions="")

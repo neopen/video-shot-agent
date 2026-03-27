@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 
 from penshot.neopen.agent.prompt_converter.prompt_converter_models import AIVideoInstructions
-from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityAuditReport, BasicViolation
+from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityAuditReport, BasicViolation, QualityRepairParams
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript
 from penshot.neopen.agent.shot_segmenter.shot_segmenter_models import ShotSequence
 from penshot.neopen.agent.video_splitter.video_splitter_models import FragmentSequence
@@ -32,6 +32,8 @@ class ScriptParsingState(BaseModel):
     parsed_script: ParsedScript = None  # 结构化剧本
     parse_errors: List[str] = []  # 解析错误信息
     parse_warnings: List[str] = []  # 解析警告信息
+    parse_issues: List[BasicViolation] = []  # 解析中的问题
+    parse_stats: Optional[Dict] = {}    # 解析统计
 
 
 class ShotGeneratorState(BaseModel):
@@ -142,15 +144,16 @@ class WorkflowState(InputState, ScriptParsingState, ShotGeneratorState, NodeLoop
 
     # 审查
     audit_history: List[Dict[str, Any]] = []  # 质量审查历史记录
-    audit_executed: bool = False
+    audit_executed: bool = False            #
     audit_timestamp: Optional[str] = None
     last_audit_result: Optional[Dict] = None  # 上一次质量审查结果
 
     # 修复
-    auto_fix_needed: bool = False  # 是否需要自动修复
+    needs_auto_fix: bool = False  # 是否需要自动修复
     auto_fix_issues: Optional[List[BasicViolation]] = []
     fix_summary: Optional[Dict[str, Any]] = {}
-    repair_params: Optional[Dict[str, Any]] = {}
+    repair_params: Dict[PipelineNode, QualityRepairParams] = {} # 按来源的修复参数
+    repair_history: List[Dict[str, Any]] = [] # 修复记录
 
     # 节点执行历史
     node_execution_history: Optional[List[Dict]] = []

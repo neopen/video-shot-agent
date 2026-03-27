@@ -7,12 +7,12 @@
 """
 import re
 import time
-from typing import Dict, Tuple, List, Optional, Any
+from typing import Dict, Tuple, List, Optional
 
-from penshot.neopen.agent.script_parser.llm_script_parser import LLMScriptParser
 from penshot.logger import debug, info, warning
+from penshot.neopen.agent.script_parser.llm_script_parser import LLMScriptParser
 from .base_models import AgentMode, ScriptType, ElementType
-from .quality_auditor.quality_auditor_models import BasicViolation, SeverityLevel, IssueType, RuleType
+from .quality_auditor.quality_auditor_models import BasicViolation, SeverityLevel, IssueType, RuleType, QualityRepairParams
 from .script_parser.rule_script_parser import RuleScriptParser
 from .script_parser.script_parser_models import ParsedScript, SceneInfo, CharacterInfo, CharacterType
 from ..shot_config import ShotConfig
@@ -41,7 +41,7 @@ class ScriptParserAgent:
         self.parsing_history = []
         self.last_parsed_script = None
 
-    def parser_process(self, script_text: str, repair_params: Optional[Dict[str, Any]] = None) -> Optional[ParsedScript]:
+    def parser_process(self, script_text: str, repair_params: Optional[QualityRepairParams]) -> Optional[ParsedScript]:
         """
         优化版剧本解析函数
         将整段中文剧本转换为结构化动作序列
@@ -67,8 +67,7 @@ class ScriptParserAgent:
         debug(" 调用AI进行深度解析...")
 
         # 根据是否有修复参数决定调用方式
-        if repair_params and repair_params.get('fix_needed'):
-            info(f"执行修复解析，问题类型: {repair_params.get('issue_types', [])}")
+        if repair_params and repair_params.fix_needed:
             parsed_script = self.script_parser.get(AgentMode.LLM).parser(
                 script_text,
                 format_type,
@@ -552,7 +551,7 @@ class ScriptParserAgent:
 
         # 5. 总体覆盖率
         extracted_content = sum(len(str(e)) for s in script.scenes for e in s.elements) + \
-                           sum(len(str(c)) for c in script.characters)
+                            sum(len(str(c)) for c in script.characters)
         coverage = min(1.0, extracted_content / len(original_text) * 3)  # 乘以3因为解析会扩展信息
         score_factors.append(coverage * 0.2)
 
@@ -566,7 +565,7 @@ class ScriptParserAgent:
         return round(completeness_score, 2), warnings, issues
 
     def _create_issue(self, rule_code: str, rule_name: str, severity: SeverityLevel, issue_type: IssueType,
-                     description: str, suggestion: str = None) -> BasicViolation:
+                      description: str, suggestion: str = None) -> BasicViolation:
         """创建问题对象"""
         return BasicViolation(
             rule_code=rule_code,

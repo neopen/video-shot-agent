@@ -5,9 +5,10 @@
 @Github: https://github.com/neopen/video-shot-agent
 @Time: 2026/1/26 14:38
 """
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from penshot.neopen.agent.base_models import ScriptType
+from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityRepairParams
 from penshot.neopen.agent.script_parser.base_script_parser import BaseScriptParser
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript
 
@@ -20,5 +21,5 @@ class RuleScriptParser(BaseScriptParser):
 
         """
 
-    def parser(self, script_text: Any, script_format: ScriptType, repair_params: Dict[str, Any] = None) -> Optional[ParsedScript]:
+    def parser(self, script_text: Any, script_format: ScriptType, repair_params: QualityRepairParams = None) -> Optional[ParsedScript]:
         pass

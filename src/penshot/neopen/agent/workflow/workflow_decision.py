@@ -339,26 +339,28 @@ class PipelineDecision:
                 warning(f"审计报告为空，但{retry_reason}")
                 return PipelineState.FAILED
 
+        passed_checks = report.stats.get("passed_checks", 0)
+        total_checks = report.stats.get("total_checks", 0)
         # 记录审计结果到状态
         if hasattr(state, 'audit_history'):
             state.audit_history.append({
                 "timestamp": datetime.now().isoformat(),
                 "status": report.status.value,
                 "score": report.score,
-                "passed_checks": report.passed_checks,
-                "total_checks": report.total_checks
+                "passed_checks": passed_checks,
+                "total_checks": total_checks,
             })
 
         # 保存最后的审计结果
         state.last_audit_result = {
             "status": report.status.value,
             "score": report.score,
-            "passed_checks": report.passed_checks,
-            "total_checks": report.total_checks,
+            "passed_checks": passed_checks,
+            "total_checks": total_checks,
             "stats": getattr(report, 'stats', {})
         }
 
-        info(f"审计报告详细: 状态={report.status.value}, 分数={report.score}%, 通过={report.passed_checks}/{report.total_checks}")
+        info(f"审计报告详细: 状态={report.status.value}, 分数={report.score}%, 通过={passed_checks}/{total_checks}")
 
         # 修复：即使状态是 FAILED，如果分数足够高，也可以继续
         if report.status == AuditStatus.FAILED:
@@ -384,7 +386,7 @@ class PipelineDecision:
             if issue_count <= 3:
                 # 少量轻微问题，自动修复后继续
                 info(f"发现{issue_count}个轻微问题，自动修复后继续")
-                state.auto_fix_needed = True
+                state.needs_auto_fix = True
                 state.auto_fix_issues = [v for v in report.violations[:3]]
                 return PipelineState.VALID  # 继续，但标记需要自动修复
             else:

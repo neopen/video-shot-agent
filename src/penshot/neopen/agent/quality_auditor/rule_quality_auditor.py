@@ -1,6 +1,6 @@
 """
-@FileName: llm_quality_auditor.py
-@Description: 
+@FileName: rule_quality_auditor.py
+@Description: 基于基本规则的审查器
 @Author: HiPeng
 @Github: https://github.com/neopen/video-shot-agent
 @Time: 2026/1/27 0:00
@@ -19,27 +19,17 @@ class RuleQualityAuditor(BaseQualityAuditor):
 
     def __init__(self, config: Optional[ShotConfig]):
         super().__init__(config)
-        # 定义基本规则
-        self.rules = [
-            {"id": "duration_limit", "name": "片段时长限制", "severity": "error"},
-            {"id": "prompt_not_empty", "name": "提示词非空", "severity": "error"},
-            {"id": "prompt_length", "name": "提示词长度", "severity": "warning"},
-            {"id": "fragment_count", "name": "片段数量", "severity": "info"},
-            {"id": "model_supported", "name": "模型支持", "severity": "warning"}
-        ]
         self.last_audit_result = None
         self.audit_count = 0
 
     def audit(self, instructions: AIVideoInstructions) -> QualityAuditReport:
         """执行基本规则审查"""
-        info(f"开始质量审查，片段数: {len(instructions.fragments)}")
+        info(f"开始基本规则审查，片段数: {len(instructions.fragments)}")
 
-        # 如果短时间内重复调用，返回缓存结果
         if self._should_use_cached_result():
             warning(f"使用缓存的审查结果，避免重复审查")
             return self.last_audit_result
 
-        # 初始化报告
         report = QualityAuditReport(
             project_info={
                 "title": instructions.project_info.get("title", "未命名项目"),
@@ -55,25 +45,20 @@ class RuleQualityAuditor(BaseQualityAuditor):
         self._check_fragment_count(instructions, report)
         self._check_model_support(instructions, report)
 
-        # 保存结果
         self.last_audit_result = report
         self.audit_count += 1
 
-        # 后处理
         return self.post_process(report)
 
     def _should_use_cached_result(self) -> bool:
-        """检查是否应该使用缓存结果"""
-        # 例如：如果1秒内重复调用，使用缓存
-        return False  # 根据实际需求实现
+        return False
 
     def _check_fragment_duration(self, instructions: AIVideoInstructions, report: QualityAuditReport) -> None:
-        """检查片段时长是否超过限制"""
+        """检查片段时长"""
         check_name = "片段时长限制检查"
-
         violations_count = 0
+
         for fragment in instructions.fragments:
-            # 检查是否超过最大时长
             if fragment.duration > self.config.duration_split_threshold:
                 self._add_violation(
                     report=report,
@@ -86,7 +71,6 @@ class RuleQualityAuditor(BaseQualityAuditor):
                 )
                 violations_count += 1
 
-            # 检查是否低于最小时长
             if fragment.duration < self.config.min_fragment_duration:
                 self._add_violation(
                     report=report,
@@ -107,8 +91,8 @@ class RuleQualityAuditor(BaseQualityAuditor):
     def _check_prompt_content(self, instructions: AIVideoInstructions, report: QualityAuditReport) -> None:
         """检查提示词内容"""
         check_name = "提示词内容检查"
-
         empty_count = 0
+
         for fragment in instructions.fragments:
             if not fragment.prompt or not fragment.prompt.strip():
                 self._add_violation(
@@ -130,15 +114,13 @@ class RuleQualityAuditor(BaseQualityAuditor):
     def _check_prompt_length(self, instructions: AIVideoInstructions, report: QualityAuditReport) -> None:
         """检查提示词长度"""
         check_name = "提示词长度检查"
-
         too_long_count = 0
         too_short_count = 0
+        max_prompt_length = self.config.max_prompt_length * 10
 
         for fragment in instructions.fragments:
             prompt_length = len(fragment.prompt)
 
-            # 检查是否过长
-            max_prompt_length = self.config.max_prompt_length * 10
             if prompt_length > max_prompt_length:
                 self._add_violation(
                     report=report,
@@ -151,7 +133,6 @@ class RuleQualityAuditor(BaseQualityAuditor):
                 )
                 too_long_count += 1
 
-            # 检查是否过短
             if prompt_length < self.config.min_prompt_length:
                 self._add_violation(
                     report=report,
@@ -194,10 +175,10 @@ class RuleQualityAuditor(BaseQualityAuditor):
     def _check_model_support(self, instructions: AIVideoInstructions, report: QualityAuditReport) -> None:
         """检查模型支持"""
         check_name = "模型支持检查"
-
         unsupported_models = []
+
         for fragment in instructions.fragments:
-            if fragment.model not in ["runway_gen2", "sora", "pika"]:  # MVP支持的基础模型
+            if fragment.model not in ["runway_gen2", "sora", "pika"]:
                 unsupported_models.append(fragment.model)
 
         if unsupported_models:

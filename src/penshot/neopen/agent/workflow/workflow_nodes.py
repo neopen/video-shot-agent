@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, Any, List
 
 from penshot.neopen.agent.human_decision.human_decision_intervention import HumanIntervention
-from penshot.neopen.agent.quality_auditor.quality_auditor_models import AuditStatus
+from penshot.neopen.agent.quality_auditor.quality_auditor_models import AuditStatus, QualityAuditReport, SeverityLevel
 from penshot.neopen.agent.workflow.workflow_models import AgentStage, PipelineNode
 from penshot.neopen.agent.workflow.workflow_states import WorkflowState
 from penshot.neopen.tools.result_storage_tool import create_result_storage
@@ -48,21 +48,66 @@ class WorkflowNodes:
 
     def parse_script_node(self, state: WorkflowState) -> WorkflowState:
         """
-        剧本解析节点
-        功能：将原始剧本解析为结构化元素序列
-        输入：raw_script
-        输出：parsed_script (包含顺序保持的元素列表)
+        剧本解析节点（增强版）
+        功能：将原始剧本解析为结构化元素序列，支持修复参数
+
+        新增功能：
+        - 支持修复参数传递（来自质量审查的修复建议）
+        - 记录解析过程中的问题
+        - 更新修复历史
         """
         try:
-            parsed_script = self.script_parser.parser_process(state.raw_script, state.repair_params)
-            debug(f"剧本解析完成，场景数: {len(parsed_script.scenes)}")
+            # 检查是否有修复参数需要传递
+            repair_params = state.repair_params.get(PipelineNode.PARSE_SCRIPT, None)
+
+            if repair_params:
+                info(f"剧本解析节点收到修复参数，问题类型: {repair_params.issue_types}")
+                info(f"修复建议: {repair_params.suggestions}")
+                # 记录修复来源
+                state.repair_history.append({
+                    "timestamp": datetime.now().isoformat(),
+                    "node": PipelineNode.PARSE_SCRIPT,
+                    "repair_params": repair_params
+                })
+            else:
+                debug("剧本解析节点执行（无修复参数）")
+
+            # 执行剧本解析（传入修复参数）
+            parsed_script = self.script_parser.parser_process(
+                state.raw_script,
+                repair_params=repair_params
+            )
+
+            debug(f"剧本解析完成，场景数: {len(parsed_script.scenes)}，角色数: {len(parsed_script.characters)}")
+            debug(f"完整性评分: {parsed_script.stats.get('completeness_score', 0)}")
 
             # 保存剧本解析结果
             self.storage.save_obj_result(state.task_id, parsed_script, "script_parser_result.json")
 
+            # 如果有修复历史，也保存到文件
+            if hasattr(state, 'repair_history') and state.repair_history:
+                self.storage.save_obj_result(state.task_id, state.repair_history, "script_parser_repair_history.json")
+
+            # 检测解析过程中发现的问题（用于后续质量审查）
+            if hasattr(self.script_parser, 'detect_issues'):
+                parse_issues = self.script_parser.detect_issues(parsed_script, state.raw_script)
+                if parse_issues:
+                    debug(f"解析过程发现问题: {len(parse_issues)}个")
+                    state.parse_issues.extend(parse_issues)
+
             state.parsed_script = parsed_script
             state.current_stage = AgentStage.PARSER
             state.current_node = PipelineNode.PARSE_SCRIPT
+
+            # 更新解析统计
+            state.parse_stats.update({
+                "parse_attempts": parsed_script.stats.get("parse_attempts", 1),
+                "completeness_score": parsed_script.stats.get("completeness_score", 0),
+                "parsing_confidence": parsed_script.stats.get("parsing_confidence", {}),
+                "repair_applied": repair_params is not None,
+            })
+
+            info(f"剧本解析节点完成，置信度: {state.parse_stats.get('parsing_confidence', {}).get('overall', 0)}")
 
         except Exception as e:
             print_log_exception()
@@ -70,14 +115,11 @@ class WorkflowNodes:
             error_msg = f"剧本解析失败: {str(e)}"
             error(error_msg)
             state.error = error_msg
+            # 添加到错误信息
+            state.error_messages.append(error_msg)
 
             # 记录堆栈跟踪（开发环境）
             debug(f"解析异常堆栈: {traceback.format_exc()}")
-
-            # 添加到错误信息
-            if not hasattr(state, 'error_messages'):
-                state.error_messages = []
-            state.error_messages.append(error_msg)
 
             # 设置错误状态
             state.current_node = PipelineNode.PARSE_SCRIPT
@@ -110,10 +152,7 @@ class WorkflowNodes:
             error_msg = f"分镜解析节点异常: {str(e)}"
             error(error_msg)
             state.error = error_msg
-
             # 添加到错误信息
-            if not hasattr(state, 'error_messages'):
-                state.error_messages = []
             state.error_messages.append(error_msg)
 
             # 设置错误状态
@@ -151,10 +190,7 @@ class WorkflowNodes:
             error_msg = f"视频分段异常: {str(e)}"
             error(error_msg)
             state.error = error_msg
-
             # 添加到错误信息
-            if not hasattr(state, 'error_messages'):
-                state.error_messages = []
             state.error_messages.append(error_msg)
 
             # 设置错误状态
@@ -193,10 +229,7 @@ class WorkflowNodes:
             error_msg = f"片段指令转换异常: {str(e)}"
             error(error_msg)
             state.error = error_msg
-
             # 添加到错误信息
-            if not hasattr(state, 'error_messages'):
-                state.error_messages = []
             state.error_messages.append(error_msg)
 
             # 设置错误状态
@@ -208,15 +241,14 @@ class WorkflowNodes:
 
     def quality_audit_node(self, state: WorkflowState) -> WorkflowState:
         """
-        质量审查节点
-        功能：检查输出质量，包括时长、连贯性等
-        输入：ai_instructions
-        输出：audit_report (审查报告和建议)
+        质量审查节点（增强版）
+        功能：合并基本规则审查和LLM深度审查，输出详细的审查报告
+
+        变更说明：
+        - 新增LLM深度审查能力
+        - 支持问题分类和来源追溯
+        - 生成增强的修复参数
         """
-        # 1. 硬规则检查：时长≤5.2秒
-        # 2. 连续性基础检查
-        # 3. 使用LLM评估视觉连贯性
-        # 4. 生成修正建议
         # 检查是否已经执行过
         if state.audit_executed and state.audit_timestamp:
             # 如果10秒内重复执行，跳过
@@ -228,34 +260,79 @@ class WorkflowNodes:
                 warning(f"质量审查在 {time_diff:.1f} 秒内重复执行，使用上次结果")
                 return state
 
-        info(f"进入质量审查节点，当前阶段={state.current_stage.value}")
-        info(f"审计前状态: 片段数={len(state.fragment_sequence.fragments) if state.fragment_sequence else 0}")
+        info(f"进入质量审查节点（增强版），当前阶段={state.current_stage.value}")
+        info(f"审查前状态: 片段数={len(state.fragment_sequence.fragments) if state.fragment_sequence else 0}")
 
         try:
+            # 执行质量审查（已合并基本规则和LLM审查）
             result = self.quality_auditor.qa_process(state.instructions)
-            debug(f"质量审查完成，违规记录数: {len(result.violations)}")
+
+            debug(f"质量审查完成:")
+            debug(f"  - 审查状态: {result.status.value}")
+            debug(f"  - 质量分数: {result.score}%")
+            debug(f"  - 总问题数: {len(result.violations)}")
+            debug(f"  - 检查项数: {len(result.checks)}")
+
+            # 如果有详细的分类信息，记录日志
+            # if hasattr(result, 'detailed_analysis'):
+            #     analysis = result.detailed_analysis
+            #     issues_by_source = analysis.get("issues_by_source", {})
+            #     if issues_by_source:
+            #         debug(f"  - 问题分布: {list(issues_by_source.keys())}")
 
             # 更新执行标志
             state.audit_executed = True
+            state.repair_params = result.repair_params
             state.audit_timestamp = datetime.now().isoformat()
             state.last_audit_result = {
                 "status": result.status.value,
                 "score": result.score,
-                "stats": result.stats
+                "stats": result.stats,
+                "violations_count": len(result.violations),
+                "has_llm_audit": self.quality_auditor.llm_auditor is not None,
             }
 
-            info(f"审计结果: 状态={result.status.value}, 分数={result.score}%, 通过检查={result.stats}")
+            info(f"审计结果汇总: 状态={result.status.value}, 分数={result.score}%, 问题统计={result.stats}")
 
-            # 记录错误来源
-            if result.status == AuditStatus.FAILED:
+            # 记录错误来源（根据审查结果）
+            if result.status in [AuditStatus.FAILED, AuditStatus.CRITICAL_ISSUES]:
                 state.error_source = PipelineNode.AUDIT_QUALITY
+                # 如果存在严重问题，记录错误信息
+                critical_issues = [
+                    v for v in result.violations
+                    if v.severity in [SeverityLevel.CRITICAL, SeverityLevel.ERROR]
+                ]
+                if critical_issues:
+                    state.error = f"质量审查发现严重问题: {len(critical_issues)}个"
+                    state.error_messages.extend([
+                        f"[{v.severity.value}] {v.description}"
+                        for v in critical_issues[:3]  # 保留前3个
+                    ])
 
-            # 保存剧本解析结果
+            # 保存审查结果（增强版报告）
             self.storage.save_obj_result(state.task_id, result, "quality_auditor_result.json")
+
+            # 如果有详细分析，单独保存一份便于调试
+            if hasattr(result, 'detailed_analysis'):
+                self.storage.save_obj_result(state.task_id, result.detailed_analysis, "quality_auditor_detailed_analysis.json")
 
             state.audit_report = result
             state.current_stage = AgentStage.AUDITOR
             state.current_node = PipelineNode.AUDIT_QUALITY
+
+            # 根据审查状态决定后续流程
+            if result.status == AuditStatus.PASSED:
+                info("质量审查通过，继续执行后续流程")
+            elif result.status == AuditStatus.MINOR_ISSUES:
+                info("质量审查发现轻微问题，可以继续但建议关注")
+            elif result.status in [AuditStatus.MODERATE_ISSUES, AuditStatus.MAJOR_ISSUES]:
+                warning(f"质量审查发现中等问题，需要修复，建议进入修正流程")
+                # 可选：触发修正流程标志
+                state.needs_auto_fix = True
+            elif result.status in [AuditStatus.CRITICAL_ISSUES, AuditStatus.FAILED]:
+                error(f"质量审查发现严重问题，需要人工干预")
+                state.needs_human_review = True
+                state.error_source = PipelineNode.AUDIT_QUALITY
 
         except Exception as e:
             print_log_exception()
@@ -263,15 +340,16 @@ class WorkflowNodes:
             error_msg = f"质量审查异常: {str(e)}"
             error(error_msg)
             state.error = error_msg
-
             # 添加到错误信息
-            if not hasattr(state, 'error_messages'):
-                state.error_messages = []
             state.error_messages.append(error_msg)
 
             # 设置错误状态
             state.current_node = PipelineNode.AUDIT_QUALITY
             state.current_stage = AgentStage.ERROR_HANDLER
+            state.error_source = PipelineNode.AUDIT_QUALITY
+
+            # 创建回退报告
+            state.audit_report = self._create_fallback_audit_report(state)
 
         return state
 
@@ -311,8 +389,7 @@ class WorkflowNodes:
         error_time = time.time()
 
         # 确保有错误信息集合
-        if not hasattr(graph_state, 'error_messages') or not graph_state.error_messages:
-            graph_state.error_messages = ["未知错误：进入错误处理节点但没有错误信息"]
+        graph_state.error_messages = ["未知错误：进入错误处理节点但没有错误信息"]
 
         # 获取最近的重要错误
         recent_errors = graph_state.error_messages[-5:] if len(graph_state.error_messages) > 5 else graph_state.error_messages
@@ -337,8 +414,6 @@ class WorkflowNodes:
         }
 
         # 保存错误处理历史
-        if not hasattr(graph_state, 'error_handling_history'):
-            graph_state.error_handling_history = []
         graph_state.error_handling_history.append(error_details)
 
         # 清理过长的错误历史（保留最近10次）
@@ -462,9 +537,6 @@ class WorkflowNodes:
                 warning(f"节点 '{current_node}' 循环次数接近限制: {current_node_loops}/{node_max_loops}")
 
         # 4. 记录节点进入详情（可选，便于调试）
-        if not hasattr(graph_state, 'node_loop_details'):
-            graph_state.node_loop_details = []
-
         graph_state.node_loop_details.append({
             "node": current_node,
             "node_loop": current_node_loops,
@@ -478,6 +550,22 @@ class WorkflowNodes:
         return graph_state
 
     # =============================================== 私有方法 ===============================================
+
+    def _create_fallback_audit_report(self, state: WorkflowState) -> QualityAuditReport:
+        """创建回退报告（当审查异常时）"""
+        return QualityAuditReport(
+            project_info={
+                "title": getattr(state.instructions, 'project_info', {}).get("title", "未知项目"),
+                "fragment_count": len(state.instructions.fragments) if state.instructions else 0,
+                "total_duration": getattr(state.instructions, 'project_info', {}).get("total_duration", 0.0)
+            },
+            status=AuditStatus.FAILED,
+            checks=[],
+            violations=[],
+            stats={"error": "audit_exception", "message": state.error},
+            score=0.0
+        )
+
     def _analyze_errors(self, error_list: List[str]) -> Dict[str, Any]:
         """分析错误列表，分类错误类型
 

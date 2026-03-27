@@ -11,16 +11,18 @@ from typing import List, Optional, Any, Dict, Literal
 
 from pydantic import Field, BaseModel
 
+from penshot.neopen.agent.workflow.workflow_models import PipelineNode
+
 
 @unique
 class SeverityLevel(str, Enum):
     """违规严重程度"""
-    INFO = "info"        # 信息级别，不影响执行
+    INFO = "info"  # 信息级别，不影响执行
     WARNING = "warning"  # 警告级别，建议修复
-    MODERATE = "moderate" # 中度问题，需要调整
-    MAJOR = "major"      # 主要问题，需要重新处理
-    CRITICAL = "critical" # 严重问题，需要人工干预
-    ERROR = "error"      # 错误级别，无法继续
+    MODERATE = "moderate"  # 中度问题，需要调整
+    MAJOR = "major"  # 主要问题，需要重新处理
+    CRITICAL = "critical"  # 严重问题，需要人工干预
+    ERROR = "error"  # 错误级别，无法继续
 
 
 @unique
@@ -34,24 +36,24 @@ class AuditStatus(str, Enum):
     FAILED = "failed"  # 完全失败
     NEEDS_HUMAN = "needs_human"  # 需要人工决策
 
-    NEEDS_REVIEW = "needs_review" # 需要审查
-    WARNING = "warning"           # 有警告
+    NEEDS_REVIEW = "needs_review"  # 需要审查
+    WARNING = "warning"  # 有警告
 
 
 class IssueType(str, Enum):
     """问题类型枚举 - 统一规范"""
-    TRUNCATION = "truncation"          # 提示词截断
-    SCENE = "scene"                    # 场景引用错误
-    WEATHER = "weather"                # 气象矛盾
-    CHARACTER = "character"            # 角色不一致
-    ACTION = "action"                  # 动作不连贯
-    DIALOGUE = "dialogue"              # 对话问题
-    PROMPT = "prompt"                  # 提示词质量问题
-    DURATION = "duration"             # 时长不合理
-    STYLE = "style"                     # 风格不一致
-    FRAGMENT = "fragment"             # 片段分隔或分镜问题
-    MODEL = "model"                # 模型问题
-    OTHER = "other"                # 其他问题
+    TRUNCATION = "truncation"  # 提示词截断
+    SCENE = "scene"  # 场景引用错误
+    WEATHER = "weather"  # 气象矛盾
+    CHARACTER = "character"  # 角色不一致
+    ACTION = "action"  # 动作不连贯
+    DIALOGUE = "dialogue"  # 对话问题
+    PROMPT = "prompt"  # 提示词质量问题
+    DURATION = "duration"  # 时长不合理
+    STYLE = "style"  # 风格不一致
+    FRAGMENT = "fragment"  # 片段分隔或分镜问题
+    MODEL = "model"  # 模型问题
+    OTHER = "other"  # 其他问题
 
 
 class RuleType(Enum):
@@ -80,7 +82,7 @@ class BasicViolation(BaseModel):
     description: str = Field(..., description="违规描述")
     issue_type: IssueType = Field(..., description="问题类型")
     severity: Literal[SeverityLevel.INFO, SeverityLevel.WARNING, SeverityLevel.ERROR,
-        SeverityLevel.MAJOR, SeverityLevel.MODERATE, SeverityLevel.CRITICAL] = Field(
+    SeverityLevel.MAJOR, SeverityLevel.MODERATE, SeverityLevel.CRITICAL] = Field(
         default=SeverityLevel.WARNING,
         description="严重程度"
     )
@@ -91,6 +93,38 @@ class BasicViolation(BaseModel):
     suggestion: Optional[str] = Field(
         default=None,
         description="改进建议"
+    )
+
+
+class QualityRepairParams(BaseModel):
+    fix_needed: bool = Field(
+        default=False,
+        description="是否需要修复"
+    )
+
+    issue_count: int = Field(
+        default=0,
+        description="问题数量"
+    )
+
+    issue_types: List[IssueType] = Field(
+        default_factory=list,
+        description="修复类型"
+    )
+
+    fragments: List[str] = Field(
+        default_factory=list,
+        description="对应的片段ID集合"
+    )
+
+    suggestions: Dict[str, List[str]] = Field(
+        default=None,
+        description="修复建议"
+    )
+
+    severity_summary: Dict[str, int] = Field(
+        default=None,
+        description="严重程度摘要"
     )
 
 
@@ -138,8 +172,8 @@ class QualityAuditReport(BaseModel):
         default_factory=lambda: {
             "total_checks": 0,
             "passed_checks": 0,
-            "warnings": 0,
-            "errors": 0,
+            SeverityLevel.WARNING.value: 0,
+            SeverityLevel.ERROR.value: 0,
             "fragments_checked": 0
         }
     )
@@ -166,4 +200,14 @@ class QualityAuditReport(BaseModel):
     detailed_analysis: Dict[str, Any] = Field(
         default=None,
         description="详细分析报告"
+    )
+
+    issues_source: Dict[PipelineNode, List[BasicViolation]] = Field(
+        default=None,
+        description="问题来源"
+    )
+
+    repair_params: Dict[PipelineNode, QualityRepairParams] = Field(
+        default=None,
+        description="修复参数"
     )
