@@ -93,8 +93,7 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseAgent):
                         "prev_shot": shot_sequence.shots[shot_idx - 1] if shot_idx > 0 else None,
                         "next_shot": shot_sequence.shots[shot_idx + 1] if shot_idx < len(shot_sequence.shots) - 1 else None,
                         "current_time": current_time,
-                        "fragment_offset": fragment_id_counter,
-                        "repair_params": self.current_repair_params
+                        "fragment_offset": fragment_id_counter
                     }
 
                     shot_fragments = self._split_shot_with_llm(context)
@@ -266,7 +265,6 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseAgent):
         shot = context["shot"]
         prev_shot = context.get("prev_shot")
         next_shot = context.get("next_shot")
-        repair_params = context.get("repair_params")
 
         # 格式化全局上下文
         global_context = self._format_global_context(self.global_metadata, shot.scene_id)
@@ -276,12 +274,12 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseAgent):
 
         # 构建修复提示
         repair_hint = ""
-        if repair_params and repair_params.fix_needed and repair_params.issue_types:
+        if self.current_repair_params and self.current_repair_params.fix_needed and self.current_repair_params.issue_types:
             repair_hint = f"""
                 【重要：修复要求】
                 之前的分割存在以下问题：
-                - 问题类型: {', '.join(repair_params.issue_types)}
-                - 修复建议: {json.dumps(repair_params.suggestions, ensure_ascii=False) if repair_params.suggestions else '无'}
+                - 问题类型: {', '.join(self.current_repair_params.issue_types)}
+                - 修复建议: {json.dumps(self.current_repair_params.suggestions, ensure_ascii=False) if self.current_repair_params.suggestions else '无'}
                 
                 请根据上述建议调整分割策略，避免再次出现相同问题。
                 """

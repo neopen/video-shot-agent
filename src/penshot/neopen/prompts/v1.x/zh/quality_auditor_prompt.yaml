@@ -1,6 +1,7 @@
 version: "1.3"
 changelog: |
   - 2026-03-18: 规范化提示词，增加评分规则、完整示例和修复优先级
+  - 2026-03-27: 添加修复参数，检测和分类各个节点的问题，并给出修复建议
 
 quality_auditor_system:
   name: "quality_auditor_system"

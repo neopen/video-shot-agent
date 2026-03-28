@@ -1,6 +1,7 @@
 version: "1.3"
 changelog: |
   - 2026-03-18: 规范化提示词，添加错误处理、分割点选择、完整示例，优化调整细节
+  - 2026-03-28: 添加修复参数，通过修复建议和问题修复问题
 
 video_splitter_system:
   name: "video_splitter_system"
