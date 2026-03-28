@@ -30,19 +30,21 @@ async def basic_usage():
     result = agent.breakdown_script(script)
 
     print(f"任务ID: {result.task_id}")
-    print(f"成功: {result.success}")
-    print(f"状态: {result.status}")
+    print(f"成功: {result.success}, 状态: {result.status}")
+    print(result)
 
     if result.success:
         data = result.data or {}
-        shots = data.get("shots", [])
-        stats = data.get("stats", {})
-        print(f"镜头数量: {stats.get('shot_count', len(shots))}")
-        print(f"总时长: {stats.get('total_duration', 0):.1f}秒")
+        instructions = data.get("instructions", {})
+        shots = instructions.fragments
+        project_info = instructions.project_info
+
+        print(f"镜头数量: {project_info.get('total_fragments', len(shots))}")
+        print(f"总时长: {project_info.get('total_duration', 0):.1f}秒")
 
         # 显示前3个镜头
         for i, shot in enumerate(shots[:3], 1):
-            print(f"  镜头{i}: {shot.get('description', '')[:50]}...")
+            print(f" 片段提示词 {i}: {shot.prompt[:50]}...")
 
     return result
 
@@ -73,6 +75,7 @@ async def async_usage():
     result = await agent.wait_for_result_async(task_id)
 
     print(f"最终结果: 成功={result.success}, 状态={result.status}")
+    print(f"result={result}")
 
     return result
 
@@ -95,7 +98,7 @@ async def batch_processing():
     for i, result in enumerate(results, 1):
         if result.success:
             data = result.data or {}
-            shots = data.get("shots", [])
+            shots = data.get("instructions", [])
             print(f"任务 {i}: 成功, {len(shots)}个镜头")
         else:
             print(f"任务 {i}: 失败 - {result.error}")
@@ -215,4 +218,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+
+    # main()
+    asyncio.run(basic_usage())
