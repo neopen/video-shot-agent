@@ -9,6 +9,7 @@ from typing import Optional
 
 from penshot.neopen.agent.prompt_converter.base_prompt_converter import BasePromptConverter
 from penshot.neopen.agent.prompt_converter.prompt_converter_models import AIVideoInstructions, AIVideoPrompt
+from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityRepairParams
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript
 from penshot.neopen.agent.shot_segmenter.shot_segmenter_models import ShotType
 from penshot.neopen.agent.video_splitter.video_splitter_models import FragmentSequence, VideoFragment
@@ -28,7 +29,7 @@ class TemplatePromptConverter(BasePromptConverter):
             ShotType.WIDE_SHOT: "Wide shot, {location}, {description}, cinematic, establishing shot"
         }
 
-    def convert(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript) -> AIVideoInstructions:
+    def convert(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript, repair_params: Optional[QualityRepairParams]) -> AIVideoInstructions:
         """使用模板将片段转换为提示词"""
         info(f"开始提示词转换，片段数: {len(fragment_sequence.fragments)}")
 
@@ -100,6 +101,7 @@ class TemplatePromptConverter(BasePromptConverter):
             prompt=full_prompt,
             negative_prompt=self.config.default_negative_prompt,
             duration=fragment.duration,
+            main_character=character,
             model=self.config.video_model,
             style=style_hint,
             requires_special_attention=fragment.requires_special_attention

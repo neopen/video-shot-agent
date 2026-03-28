@@ -285,6 +285,7 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
         return AIVideoPrompt(
             fragment_id=fragment.id,
             prompt=combined_prompt,
+            main_character=fragment.continuity_notes.get("main_character", ""),
             negative_prompt=result.get("negative_prompt", self.config.default_negative_prompt),
             duration=fragment.duration,
             model=self.config.video_model,

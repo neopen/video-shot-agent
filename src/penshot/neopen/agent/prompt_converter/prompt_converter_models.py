@@ -250,6 +250,12 @@ class AIVideoPrompt(BaseModel):
         description="负面提示词"
     )
 
+    # 核心内容关联
+    main_character: Optional[str] = Field(
+        default=None,
+        description="主要角色（如有）"
+    )
+
     # 基本技术参数
     duration: float = Field(
         ...,
