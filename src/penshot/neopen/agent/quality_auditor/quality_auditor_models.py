@@ -68,6 +68,16 @@ class RuleType(Enum):
     SHOT_TYPE_UNIFORM = ("shot_type_uniform", "镜头类型单一")
     SHOT_REPETITIVE = ("shot_repetitive", "镜头类型相同且连续")
     CHARACTER_NOT_IN_SHOTS = ("character_not_in_shots", "角色未在镜头中出现")
+    # splitter
+    FRAGMENT_MISSING = ("fragment_missing", "未生成视频片段")
+    FRAGMENT_INSUFFICIENT = ("fragment_insufficient", "片段数量不足")
+    FRAGMENT_DURATION_TOO_SHORT = ("fragment_duration_too_short", "片段时长过短")
+    FRAGMENT_DURATION_TOO_LONG = ("fragment_duration_too_long", "片段时长过长")
+    FRAGMENT_DESCRIPTION_MISSING = ("fragment_description_missing", "片段描述过短或缺失")
+    FRAGMENT_TIME_GAP = ("fragment_time_gap", "片段间存在时间间隔")
+    FRAGMENT_OVERLAP = ("fragment_overlap", "片段间存在重叠")
+    FRAGMENT_NO_ELEMENTS = ("fragment_no_elements", "片段未关联剧本元素")
+    FRAGMENT_NO_CONTINUITY = ("fragment_no_continuity", "片段缺少连续性注释")
     #
     DURATION_LIMIT = ("duration_limit", "片段时长限制")
     PROMPT_NOT_EMPTY = ("prompt_not_empty", "提示词非空")

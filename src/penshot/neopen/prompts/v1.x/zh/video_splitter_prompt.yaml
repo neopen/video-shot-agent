@@ -94,6 +94,7 @@ video_splitter_user:
     【全剧上下文】
       {global_context}
 
+    {repair_hint}
     
     【片段长度优化】
       - 超过{split_threshold}秒的镜头需要考虑分割，否则不需要分割

@@ -7,6 +7,7 @@
 """
 from typing import List, Optional
 
+from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityRepairParams
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript
 from penshot.neopen.agent.shot_segmenter.shot_segmenter_models import ShotSequence, ShotInfo, ShotType
 from penshot.neopen.agent.video_splitter.base_video_splitter import BaseVideoSplitter
@@ -23,7 +24,7 @@ class RuleVideoSplitter(BaseVideoSplitter):
         # 简单规则：镜头时长>5秒就拆分
         self.split_threshold = getattr(config, 'duration_split_threshold', 5.5)  # 超过5秒触发分割
 
-    def cut(self, shot_sequence: ShotSequence, parsed_script: ParsedScript) -> FragmentSequence:
+    def cut(self, shot_sequence: ShotSequence, parsed_script: ParsedScript, repair_params: Optional[QualityRepairParams]) -> FragmentSequence:
         """简单规则分割：镜头时长>5秒就拆分"""
         info(f"开始视频分割，镜头数: {len(shot_sequence.shots)}")
 
