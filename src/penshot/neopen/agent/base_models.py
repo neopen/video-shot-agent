@@ -8,9 +8,136 @@
 import uuid
 from datetime import datetime
 from enum import Enum, unique
-from typing import Optional
+from typing import Optional, List
 
 from pydantic import BaseModel, Field
+
+from penshot.utils.enum_utils import EnumPrefixMatcher
+
+
+class PrefixEnum(Enum):
+    """支持忽略大小写和前缀匹配的枚举基类"""
+
+    @classmethod
+    def match_prefix(cls, text, case_sensitive=False):
+        text = text if case_sensitive else text.lower()
+        for member in cls:
+            value = member.value if case_sensitive else member.value.lower()
+            if value.startswith(text):
+                return member
+        return None
+
+    @classmethod
+    def match_all_prefix(cls, text, case_sensitive=False):
+        text = text if case_sensitive else text.lower()
+        return [
+            member for member in cls
+            if (member.value if case_sensitive else member.value.lower()).startswith(text)
+        ]
+
+    @classmethod
+    def match_by_prefix(cls, text: str, min_length: int = 3) -> Optional['Enum']:
+        """
+        根据前缀匹配枚举值（默认前三位相同即匹配）
+
+        Args:
+            text: 输入文本
+            min_length: 最小匹配长度，默认3
+
+        Returns:
+            匹配的枚举成员，未匹配返回 None
+        """
+        if not text or len(text) < min_length:
+            return None
+
+        # 统一转小写，忽略大小写
+        text_prefix = text[:min_length].lower()
+
+        for member in cls:
+            value = str(member.value).lower()
+            if len(value) >= min_length and value[:min_length] == text_prefix:
+                return member
+
+        return None
+
+    @classmethod
+    def match_all_by_prefix(cls, text: str, min_length: int = 3) -> List['Enum']:
+        """返回所有前缀匹配的枚举成员"""
+        if not text or len(text) < min_length:
+            return []
+
+        text_prefix = text[:min_length].lower()
+        results = []
+
+        for member in cls:
+            value = str(member.value).lower()
+            if len(value) >= min_length and value[:min_length] == text_prefix:
+                results.append(member)
+
+        return results
+
+    @classmethod
+    def is_valid_prefix(cls, text: str, min_length: int = 3) -> bool:
+        """检查前缀是否有效"""
+        return cls.match_by_prefix(text, min_length) is not None
+
+
+class PrefixValueEnum(Enum):
+    """枚举值为前缀，支持匹配完整输入值"""
+
+    @classmethod
+    def match_by_input(cls, input_text: str, min_length: int = 3) -> Optional['Enum']:
+        """
+        根据完整输入值匹配枚举（枚举值是前缀）
+
+        规则：输入值的前缀与枚举值比较，前三位相同即匹配
+
+        Args:
+            input_text: 完整输入值（如 "runway_gen2"）
+            min_length: 最小匹配长度，默认 3
+
+        Returns:
+            匹配的枚举成员，未匹配返回 None
+        """
+        if not input_text:
+            return None
+
+        input_lower = input_text.lower()
+
+        for member in cls:
+            enum_value = str(member.value).lower()
+
+            # 枚举值长度必须 >= min_length
+            if len(enum_value) < min_length:
+                continue
+
+            # 检查输入值是否以枚举值开头（前缀匹配）
+            if input_lower.startswith(enum_value):
+                return member
+
+        return None
+
+    @classmethod
+    def match_all_by_input(cls, input_text: str, min_length: int = 3) -> List['Enum']:
+        """返回所有匹配的枚举成员"""
+        if not input_text:
+            return []
+
+        input_lower = input_text.lower()
+        results = []
+
+        for member in cls:
+            enum_value = str(member.value).lower()
+
+            if len(enum_value) >= min_length and input_lower.startswith(enum_value):
+                results.append(member)
+
+        return results
+
+    @classmethod
+    def is_valid_input(cls, input_text: str, min_length: int = 3) -> bool:
+        """检查输入值是否有效"""
+        return cls.match_by_input(input_text, min_length) is not None
 
 
 # ==================== 基础枚举和类型定义 ====================
@@ -55,14 +182,21 @@ class VideoStyle(str, Enum):
     AMBIENT = "ambient"
 
 
-class VideoModelType(str, Enum):
+class VideoModelType(str, PrefixValueEnum):
     """AI视频模型类型枚举"""
     RUNWAY_GEN2 = "runway_gen2"  # Runway Gen-2
-    PIKA_LABS = "pika_labs"  # Pika Labs
-    STABLE_VIDEO = "stable_video"  # Stable Video Diffusion
-    LUMAS = "lumas"  # Luma AI
-    KAIBER = "kaiber"  # Kaiber
-    MOONVALLEY = "moonvalley"  # Moon Valley
+    RUNWAY = "runway"
+    SORA = "sora"
+    VEO = "veo"
+    Pika = "pika"
+    MIDJOURNEY = "midjourney"
+    STABLE = "stable"
+    DALLE = "dalle"
+
+
+def parse_model_name(full_name: str) -> Optional[VideoModelType]:
+    """从完整模型名解析基础模型"""
+    return EnumPrefixMatcher.match(VideoModelType, full_name.strip(), min_length=3)
 
 
 class AudioModelType(str, Enum):
@@ -93,3 +227,4 @@ class BaseMetadata(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = None
     version: str = Field(default="1.0", description="模型版本")
+
