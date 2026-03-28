@@ -44,8 +44,11 @@ class ScriptParserAgent(BaseRepairableAgent[ParsedScript, str]):
         self.parsing_history = []
         self.last_parsed_script = None
 
-    def process(self, script_text: str) -> Optional[ParsedScript]:
-        return self.parser_process(script_text, self.current_repair_params)
+    def process(self, script_text: str, repair_params: Optional[QualityRepairParams]) -> Optional[ParsedScript]:
+        if repair_params:
+            self.current_repair_params = repair_params
+
+        return self.parser_process(script_text, repair_params)
 
     def repair_result(self, parsed_script: ParsedScript, issues: List[BasicViolation],
                       original_text: str = None) -> ParsedScript:

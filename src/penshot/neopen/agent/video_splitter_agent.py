@@ -44,8 +44,11 @@ class VideoSplitterAgent(BaseRepairableAgent[FragmentSequence, ShotSequence]):
         self.split_history = []
         self.last_fragment_sequence = None
 
-    def process(self, shot_sequence: ShotSequence, parsed_script: ParsedScript) -> Optional[FragmentSequence]:
-        return self.video_process(shot_sequence, parsed_script, self.current_repair_params)
+    def process(self, shot_sequence: ShotSequence, parsed_script: ParsedScript, repair_params: Optional[QualityRepairParams]) -> Optional[FragmentSequence]:
+        if repair_params:
+            self.current_repair_params = repair_params
+
+        return self.video_process(shot_sequence, parsed_script, repair_params)
 
     def repair_result(self, fragment_sequence: FragmentSequence, issues: List[BasicViolation],
                       shot_sequence: ShotSequence) -> FragmentSequence:

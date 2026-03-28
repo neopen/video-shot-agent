@@ -279,14 +279,14 @@ class QualityRepairParams(BaseModel):
         description="问题数量"
     )
 
-    issue_types: List[IssueType] = Field(
+    issue_types: List[str] = Field(
         default_factory=list,
         description="修复类型"
     )
 
-    issues: List[BasicViolation] = Field(
+    issues: List[Any] = Field(
         default_factory=list,
-        description="完整问题列表"
+        description="完整问题列表（可以是 BasicViolation 或 ContinuityIssue）"
     )
 
     fragments: List[str] = Field(
@@ -303,6 +303,27 @@ class QualityRepairParams(BaseModel):
         default=None,
         description="严重程度摘要"
     )
+
+    def add_issue_type(self, issue_type: Any) -> None:
+        """添加问题类型（自动转换为字符串）"""
+        if hasattr(issue_type, 'value'):
+            type_str = issue_type.value
+        else:
+            type_str = str(issue_type)
+
+        if type_str not in self.issue_types:
+            self.issue_types.append(type_str)
+
+    def add_suggestion(self, key: str, suggestion: str) -> None:
+        """添加修复建议"""
+        if key not in self.suggestions:
+            self.suggestions[key] = []
+        self.suggestions[key].append(suggestion)
+
+    def get_issue_type_objects(self) -> List[Any]:
+        """获取原始问题类型对象（需要外部转换）"""
+        # 注意：这个方法返回的是字符串，需要外部根据上下文转换
+        return self.issue_types
 
 
 

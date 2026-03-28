@@ -44,9 +44,11 @@ class PromptConverterAgent(BaseRepairableAgent[AIVideoInstructions, FragmentSequ
         self.convert_history = []
         self.last_instructions = None
 
-    def process(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript) -> Optional[AIVideoInstructions]:
+    def process(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript, repair_params: Optional[QualityRepairParams]) -> Optional[AIVideoInstructions]:
+        if repair_params:
+            self.current_repair_params = repair_params
 
-        return self.prompt_process(fragment_sequence, parsed_script, self.current_repair_params)
+        return self.prompt_process(fragment_sequence, parsed_script, repair_params)
 
     def repair_result(self, instructions: AIVideoInstructions, issues: List[BasicViolation],
                       fragment_sequence: FragmentSequence) -> AIVideoInstructions:

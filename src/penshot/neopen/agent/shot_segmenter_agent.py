@@ -57,7 +57,10 @@ class ShotSegmenterAgent(BaseRepairableAgent[ShotSequence, ParsedScript]):
         self._increase_shot_count = False
         self._prefer_shorter_shots = False
 
-    def process(self, structured_script: ParsedScript) -> Optional[ShotSequence]:
+    def process(self, structured_script: ParsedScript, repair_params: Optional[QualityRepairParams]) -> Optional[ShotSequence]:
+        if repair_params:
+            self.current_repair_params = repair_params
+
         # 使用当前修复参数影响生成策略
         # if self._increase_shot_count:
         #     # 调整分镜生成器的配置
@@ -67,7 +70,7 @@ class ShotSegmenterAgent(BaseRepairableAgent[ShotSequence, ParsedScript]):
         #     # 调整时长阈值
         #     self.segmenter.set_max_shot_duration(4.0)  # 限制最长4秒
 
-        return self.shot_process(structured_script, self.current_repair_params)
+        return self.shot_process(structured_script, repair_params)
 
     def repair_result(self, shot_sequence: ShotSequence, issues: List[BasicViolation],
                       structured_script: ParsedScript) -> ShotSequence:
