@@ -7,7 +7,7 @@
 """
 from abc import abstractmethod, ABC
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from penshot.logger import info, warning
 from penshot.neopen.agent.base_models import ScriptType, ElementType
@@ -27,7 +27,7 @@ class BaseScriptParser(ABC):
         self.complexity_assessor = ComplexityAssessor()
 
     @abstractmethod
-    def parser(self, script_text: Any, script_format: ScriptType, repair_params: QualityRepairParams = None) -> ParsedScript:
+    def parser(self, script_text: Any, script_format: ScriptType, repair_params: Optional[QualityRepairParams]) -> ParsedScript:
         """处理输入数据（子类实现）"""
         raise NotImplementedError("子类必须实现process方法")
 

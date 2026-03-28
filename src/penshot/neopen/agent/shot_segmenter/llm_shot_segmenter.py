@@ -66,8 +66,7 @@ class LLMShotSegmenter(BaseShotSegmenter, BaseAgent):
             try:
                 scene_shots = self._split_scene_with_llm(
                     scene, current_time, len(all_shots),
-                    parsed_script.global_metadata,
-                    repair_params
+                    parsed_script.global_metadata
                 )
                 all_shots.extend(scene_shots)
 
@@ -99,8 +98,7 @@ class LLMShotSegmenter(BaseShotSegmenter, BaseAgent):
         return shot_sequence
 
     def _split_scene_with_llm(self, scene: SceneInfo, start_time: float,
-                              shot_offset: int, global_metadata: GlobalMetadata,
-                              repair_params: Optional[QualityRepairParams] = None) -> List[ShotInfo]:
+                              shot_offset: int, global_metadata: GlobalMetadata) -> List[ShotInfo]:
         """使用LLM拆分单个场景"""
 
         # 使用详细格式
@@ -114,17 +112,15 @@ class LLMShotSegmenter(BaseShotSegmenter, BaseAgent):
 
         # 构建修复提示（如果有）
         repair_hint = ""
-        if repair_params or self.current_repair_params:
-            params = repair_params or self.current_repair_params
-            if params.fix_needed and params.issue_types:
-                repair_hint = f"""
-                    【重要：修复要求】
+        if self.current_repair_params and self.current_repair_params.fix_needed and self.current_repair_params.issue_types:
+            repair_hint = f"""
+                【重要：修复要求】
                     之前的分镜存在以下问题：
-                    - 问题类型: {', '.join(params.issue_types)}
-                    - 修复建议: {json.dumps(params.suggestions, ensure_ascii=False) if params.suggestions else '无'}
+                    - 问题类型: {', '.join(self.current_repair_params.issue_types)}
+                    - 修复建议: {json.dumps(self.current_repair_params.suggestions, ensure_ascii=False) if self.current_repair_params.suggestions else '无'}
                     
                     请根据上述建议调整分镜生成策略，避免再次出现相同问题。
-                    """
+                """
 
         # 准备用户提示词
         user_prompt = self.user_prompt_template.format(

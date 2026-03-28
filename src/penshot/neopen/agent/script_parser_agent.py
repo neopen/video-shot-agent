@@ -65,16 +65,7 @@ class ScriptParserAgent:
 
         # 步骤2：AI深度解析（如果提供了修复参数，传递给LLM）
         debug(" 调用AI进行深度解析...")
-
-        # 根据是否有修复参数决定调用方式
-        if repair_params and repair_params.fix_needed:
-            parsed_script = self.script_parser.get(AgentMode.LLM).parser(
-                script_text,
-                format_type,
-                repair_params
-            )
-        else:
-            parsed_script = self.script_parser.get(AgentMode.LLM).parser(script_text, format_type)
+        parsed_script = self.script_parser.get(AgentMode.LLM).parser(script_text, format_type, repair_params)
 
         # 步骤3：规则校验和补全
         if self.use_local_rules:
@@ -201,6 +192,65 @@ class ScriptParserAgent:
                         suggestion="请确保所有引用的角色都在characters列表中"
                     ))
 
+            # ========== 新增：6. 检查时长合理性 ==========
+            total_duration = sum(e.duration for s in parsed_script.scenes for e in s.elements)
+            if total_duration > 0:
+                # 检查是否有过短的片段
+                short_elements = [e for s in parsed_script.scenes for e in s.elements if e.duration < 1.0]
+                if short_elements:
+                    issues.append(BasicViolation(
+                        rule_code=RuleType.ELEMENT_DURATION_TOO_SHORT.code,
+                        rule_name=RuleType.ELEMENT_DURATION_TOO_SHORT.description,
+                        issue_type=IssueType.DURATION,
+                        description=f"发现{len(short_elements)}个元素时长过短",
+                        severity=SeverityLevel.WARNING,
+                        fragment_id=None,
+                        suggestion="每个元素时长应至少1秒"
+                    ))
+
+            # ========== 新增：7. 检查元素顺序 ==========
+            for scene in parsed_script.scenes:
+                sequences = [e.sequence for e in scene.elements]
+                if sequences != sorted(sequences):
+                    issues.append(BasicViolation(
+                        rule_code=RuleType.ELEMENT_SEQUENCE_WRONG.code,
+                        rule_name=RuleType.ELEMENT_SEQUENCE_WRONG.description,
+                        issue_type=IssueType.SCENE,
+                        description=f"场景{scene.id}的元素顺序不正确",
+                        severity=SeverityLevel.MODERATE,
+                        fragment_id=None,
+                        suggestion="按剧情发展顺序排列元素"
+                    ))
+
+            # ========== 新增：8. 检查情感标注 ==========
+            for scene in parsed_script.scenes:
+                for elem in scene.elements:
+                    if elem.type == ElementType.DIALOGUE and (not elem.emotion or elem.emotion == "neutral"):
+                        # 对话内容可能包含情感，但标注为中性
+                        if any(word in elem.content.lower() for word in ["笑", "开心", "哭", "伤心", "怒", "生气"]):
+                            issues.append(BasicViolation(
+                                rule_code=RuleType.EMOTION_MISMATCH.code,
+                                rule_name=RuleType.EMOTION_MISMATCH.description,
+                                issue_type=IssueType.CHARACTER,
+                                description=f"对话{elem.id}可能包含情感但标注为中性",
+                                severity=SeverityLevel.INFO,
+                                fragment_id=None,
+                                suggestion="根据对话内容标注正确的情感"
+                            ))
+
+            # ========== 新增：9. 检查角色描述完整性 ==========
+            for char in parsed_script.characters:
+                if not char.description or len(char.description) < 5:
+                    issues.append(BasicViolation(
+                        rule_code=RuleType.CHARACTER_DESC_MISSING.code,
+                        rule_name=RuleType.CHARACTER_DESC_MISSING.description,
+                        issue_type=IssueType.CHARACTER,
+                        description=f"角色'{char.name}'缺少描述信息",
+                        severity=SeverityLevel.WARNING,
+                        fragment_id=None,
+                        suggestion="为角色添加外貌、性格等描述信息"
+                    ))
+
         return issues
 
     def repair_script(self, parsed_script: ParsedScript, issues: List[BasicViolation], original_text: str = None) -> ParsedScript:
@@ -270,6 +320,7 @@ class ScriptParserAgent:
                                 )
                                 parsed_script.scenes.append(new_scene)
                                 repair_actions.append(f"从段落创建场景: {new_scene.id}")
+
                     repair_actions.append("场景数不足，建议手动检查剧本结构")
 
         # ========== 2. 修复角色问题 ==========
@@ -495,72 +546,87 @@ class ScriptParserAgent:
         warnings = []
         issues = []
         score_factors = []
+        weights = {
+            "scenes": 0.25,
+            "characters": 0.25,
+            "dialogues": 0.2,
+            "actions": 0.2,
+            "coverage": 0.1
+        }
 
-        # 1. 场景完整性
+        # 1. 场景完整性 (权重0.25)
         if not script.scenes:
             warnings.append("未识别到明确场景")
             issues.append(self._create_issue(
                 "scene_missing", "场景缺失", SeverityLevel.ERROR, IssueType.SCENE,
                 "未能识别到任何场景，请检查剧本格式"
             ))
-            score_factors.append(0.3)
+            scene_score = 0.0
         else:
-            scene_score = min(1.0, len(script.scenes) / 3.0)  # 至少3个场景得满分
-            score_factors.append(scene_score * 0.2)
+            # 考虑场景数量和质量
+            scene_count_score = min(1.0, len(script.scenes) / 3.0)
+            # 检查场景描述质量
+            scene_desc_score = sum(1 for s in script.scenes if s.description and len(s.description) > 10) / max(len(script.scenes), 1)
+            scene_score = (scene_count_score + scene_desc_score) / 2
+        score_factors.append(scene_score * weights["scenes"])
 
-        # 2. 角色完整性
+        # 2. 角色完整性 (权重0.25)
         if not script.characters:
             warnings.append("未识别到明确角色")
             issues.append(self._create_issue(
                 "character_missing", "角色缺失", SeverityLevel.ERROR, IssueType.CHARACTER,
                 "未能识别到任何角色，剧本中需要包含角色信息"
             ))
-            score_factors.append(0.2)
+            char_score = 0.0
         else:
-            char_score = min(1.0, len(script.characters) / 2.0)  # 至少2个角色得满分
-            score_factors.append(char_score * 0.2)
+            char_count_score = min(1.0, len(script.characters) / 2.0)
+            char_desc_score = sum(1 for c in script.characters if c.description and len(c.description) > 5) / max(len(script.characters), 1)
+            char_score = (char_count_score + char_desc_score) / 2
+        score_factors.append(char_score * weights["characters"])
 
-        # 3. 对话完整性
+        # 3. 对话完整性 (权重0.2)
         dialogues = [e for s in script.scenes for e in s.elements if e.type == ElementType.DIALOGUE]
-        dialogue_density = len(dialogues) / (len(original_text) / 1000)  # 每200字符的对话数
-        if dialogue_density < 0.1 and ('"' in original_text or '说' in original_text):
+        dialogue_indicators = ['"', '说', '道', '：', ':']
+        has_dialogue_in_original = any(ind in original_text for ind in dialogue_indicators)
+
+        if has_dialogue_in_original and not dialogues:
             warnings.append("对话提取可能不完整")
             issues.append(self._create_issue(
                 "dialogue_insufficient", "对话提取不足", SeverityLevel.MODERATE, IssueType.DIALOGUE,
                 f"检测到对话但只提取了{len(dialogues)}条"
             ))
-            dialogue_score = 0.5
+            dialogue_score = 0.3
+        elif dialogues:
+            # 对话数量合理性
+            expected_dialogues = original_text.count('说') + original_text.count('道') + original_text.count('：')
+            dialogue_score = min(1.0, len(dialogues) / max(expected_dialogues, 1))
         else:
-            dialogue_score = min(1.0, dialogue_density)
-        score_factors.append(dialogue_score * 0.2)
+            dialogue_score = 0.5
+        score_factors.append(dialogue_score * weights["dialogues"])
 
-        # 4. 动作完整性
+        # 4. 动作完整性 (权重0.2)
         actions = [e for s in script.scenes for e in s.elements if e.type == ElementType.ACTION]
         action_verbs = ['走', '跑', '坐', '站', '拿', '看', '笑', '哭', '转身', '点头', '摇头', '开门', '关门', '吃', '喝', '打', '跳', '飞', '唱']
         verb_count = sum(1 for verb in action_verbs if verb in original_text)
-        if verb_count > 0 and len(actions) < verb_count * 0.5:
-            warnings.append("动作提取可能不完整")
-            issues.append(self._create_issue(
-                "action_insufficient", "动作提取不足", SeverityLevel.MODERATE, IssueType.ACTION,
-                f"检测到{verb_count}个动作词，但只提取了{len(actions)}个动作"
-            ))
-            action_score = 0.6
-        else:
-            action_score = min(1.0, len(actions) / max(verb_count, 1))
-        score_factors.append(action_score * 0.2)
 
-        # 5. 总体覆盖率
+        if verb_count > 0:
+            action_score = min(1.0, len(actions) / max(verb_count * 0.5, 1))
+        else:
+            action_score = 0.5
+        score_factors.append(action_score * weights["actions"])
+
+        # 5. 总体覆盖率 (权重0.1)
         extracted_content = sum(len(str(e)) for s in script.scenes for e in s.elements) + \
                             sum(len(str(c)) for c in script.characters)
-        coverage = min(1.0, extracted_content / len(original_text) * 3)  # 乘以3因为解析会扩展信息
-        score_factors.append(coverage * 0.2)
+        coverage = min(1.0, extracted_content / max(len(original_text), 1) * 2)
+        score_factors.append(coverage * weights["coverage"])
 
         # 计算总分
         completeness_score = sum(score_factors)
 
-        # 根据警告数量调整分数
-        warning_penalty = min(0.3, len(warnings) * 0.05)
-        completeness_score = max(0.0, completeness_score - warning_penalty)
+        # 根据问题数量调整分数
+        issue_penalty = min(0.2, len(issues) * 0.05)
+        completeness_score = max(0.0, min(1.0, completeness_score - issue_penalty))
 
         return round(completeness_score, 2), warnings, issues
 
@@ -581,20 +647,31 @@ class ScriptParserAgent:
         """计算各部分的解析置信度"""
         confidence = {}
 
-        # 基于元素数量和完整性计算置信度
+        # 场景置信度：基于场景数量和描述质量
         if script.scenes:
-            confidence["scenes"] = min(1.0, round(len(script.scenes) * 0.3, 2))
+            scene_count_conf = min(1.0, len(script.scenes) / 5.0)
+            scene_desc_conf = sum(1 for s in script.scenes if s.description and len(s.description) > 20) / max(len(script.scenes), 1)
+            confidence["scenes"] = round((scene_count_conf + scene_desc_conf) / 2, 2)
 
+        # 角色置信度：基于角色数量和描述质量
         if script.characters:
-            confidence["characters"] = min(1.0, round(len(script.characters) * 0.4, 2))
+            char_count_conf = min(1.0, len(script.characters) / 4.0)
+            char_desc_conf = sum(1 for c in script.characters if c.description and len(c.description) > 10) / max(len(script.characters), 1)
+            confidence["characters"] = round((char_count_conf + char_desc_conf) / 2, 2)
 
+        # 对话置信度：基于对话完整性和情感标注
         dialogues = [e for s in script.scenes for e in s.elements if e.type == ElementType.DIALOGUE]
         if dialogues:
-            confidence["dialogues"] = min(1.0, round(len(dialogues) * 0.2, 2))
+            dialogue_emotion_conf = sum(1 for e in dialogues if e.emotion and e.emotion != "neutral") / len(dialogues)
+            dialogue_content_conf = sum(1 for e in dialogues if e.content and len(e.content) > 5) / len(dialogues)
+            confidence["dialogues"] = round((dialogue_emotion_conf + dialogue_content_conf) / 2, 2)
 
+        # 动作置信度：基于动作描述和强度
         actions = [e for s in script.scenes for e in s.elements if e.type == ElementType.ACTION]
         if actions:
-            confidence["actions"] = min(1.0, round(len(actions) * 0.3, 2))
+            action_desc_conf = sum(1 for e in actions if e.description and len(e.description) > 10) / len(actions)
+            action_intensity_conf = sum(1 for e in actions if e.intensity != 0.5) / len(actions)
+            confidence["actions"] = round((action_desc_conf + action_intensity_conf) / 2, 2)
 
         # 总体置信度
         if confidence:

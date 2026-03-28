@@ -39,7 +39,7 @@ class LLMScriptParser(BaseScriptParser, BaseAgent):
             "default": self._get_default_prompt()
         }
 
-    def parser(self, script_text: Any, script_format: ScriptType, repair_params: QualityRepairParams = None) -> Optional[ParsedScript]:
+    def parser(self, script_text: Any, script_format: ScriptType, repair_params: Optional[QualityRepairParams]) -> Optional[ParsedScript]:
 
         """
         优化版剧本解析函数
@@ -58,15 +58,26 @@ class LLMScriptParser(BaseScriptParser, BaseAgent):
             self.system_prompts["default"]
         )
 
+        # 构建修复提示
+        repair_hint = ""
+        if repair_params and repair_params.fix_needed and repair_params.issue_types:
+            repair_hint = f"""
+                【重要：修复要求】
+                    之前的解析存在以下问题：
+                    - 问题类型: {', '.join(repair_params.issue_types)}
+                    - 修复建议: {json.dumps(repair_params.suggestions, ensure_ascii=False) if repair_params.suggestions else '无'}
+
+                    请根据上述建议调整解析策略，避免再次出现相同问题。
+                """
+
         # 构建用户提示词
         prompt_template = self._build_user_prompt(script_text, script_format)
 
-        if repair_params:
-            issue_types = repair_params.issue_types
-            suggestions = repair_params.suggestions
-            user_prompt = prompt_template.format(script_text=script_text, issue_types=', '.join(issue_types), suggestions=suggestions)
-        else:
-            user_prompt = prompt_template.format(script_text=script_text, issue_types="", suggestions="")
+        # if repair_params and repair_params.fix_needed and repair_params.issue_types:
+        #     user_prompt = prompt_template.format(script_text=script_text
+        #                                          , issue_types=', '.join(repair_params.issue_types), suggestions=repair_params.suggestions)
+
+        user_prompt = prompt_template.format(script_text=script_text, repair_hint=repair_hint)
 
         debug(f"AI系统提示词（摘要）: {system_prompt[:150]}...")
         debug(f"AI用户提示词（摘要）: {user_prompt[:150]}...")

@@ -21,5 +21,5 @@ class RuleScriptParser(BaseScriptParser):
 
         """
 
-    def parser(self, script_text: Any, script_format: ScriptType, repair_params: QualityRepairParams = None) -> Optional[ParsedScript]:
+    def parser(self, script_text: Any, script_format: ScriptType, repair_params: Optional[QualityRepairParams]) -> Optional[ParsedScript]:
         pass

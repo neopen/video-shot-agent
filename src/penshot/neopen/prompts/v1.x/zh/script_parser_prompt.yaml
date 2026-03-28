@@ -288,15 +288,13 @@ script_parser_user:
   description: "用户输入提示词模板，适用于剧本解析任务"
   template: |
     请解析以下剧本内容，返回完整的JSON解析结果。
-    
-    【问题类型】
-    {issue_types}
-    
-    【修复建议】
-    {suggestions}
 
+    {repair_hint}
+    
+    
     【剧本内容】
     {script_text}
+    
     
     【音频解析规则】
       1. 环境音识别：

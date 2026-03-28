@@ -242,11 +242,11 @@ class LLMPromptConverter(BasePromptConverter, BaseAgent):
         if self.current_repair_params and self.current_repair_params.fix_needed and self.current_repair_params.issue_types:
             repair_hint = f"""
                 【重要：修复要求】
-                之前的提示词存在以下问题：
-                - 问题类型: {', '.join(self.current_repair_params.issue_types)}
-                - 修复建议: {json.dumps(self.current_repair_params.suggestions, ensure_ascii=False) if self.current_repair_params.suggestions else '无'}
-                
-                请根据上述建议调整提示词生成策略，避免再次出现相同问题。
+                    之前的提示词存在以下问题：
+                    - 问题类型: {', '.join(self.current_repair_params.issue_types)}
+                    - 修复建议: {json.dumps(self.current_repair_params.suggestions, ensure_ascii=False) if self.current_repair_params.suggestions else '无'}
+                    
+                    请根据上述建议调整提示词生成策略，避免再次出现相同问题。
                 """
 
         # 准备提示词 - 要求同时生成视频和音频
