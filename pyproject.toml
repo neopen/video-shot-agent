@@ -62,6 +62,7 @@ dependencies = [
     # 数据处理
     "numpy>=1.24.0",
     "jieba>=0.42.1",
+    "redis",
 
     # 工具库
 #    "requests>=2.31.0",
@@ -145,6 +146,7 @@ penshot = [
     "config/*.yaml",
     "config/**/*.yaml",
     "neopen/prompts/**/*.yaml",
+    "neopen/config/**/*.yaml",
     ".env.example"
 ]
 
