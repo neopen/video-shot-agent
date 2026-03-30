@@ -6,10 +6,10 @@
 @Time: 2026/3/30 13:10
 """
 import time
-from enum import Enum
-from typing import Optional, Any, Dict, List
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
+from typing import Optional, Any, Dict, List
 
 from penshot.neopen.tools.memory.long_term_memory import LongTermMemory
 from penshot.neopen.tools.memory.medium_term_memory import MediumTermMemory
@@ -40,13 +40,14 @@ class MemoryManager:
     """统一记忆管理器 - 支持多层级记忆和自动降级"""
 
     def __init__(
-        self,
-        llm,
-        enable_long_term: bool = False,
-        short_term_size: int = 20,
-        short_term_ttl: int = 3600,
-        medium_term_max: int = 50,
-        long_term_collection: str = "penshot_memory"
+            self,
+            llm,
+            embeddings,
+            enable_long_term: bool = False,
+            short_term_size: int = 20,
+            short_term_ttl: int = 3600,
+            medium_term_max: int = 50,
+            long_term_collection: str = "penshot_memory"
     ):
         """
         初始化记忆管理器
@@ -60,6 +61,7 @@ class MemoryManager:
             long_term_collection: 长期记忆集合名
         """
         self.llm = llm
+        self.embeddings = embeddings
 
         # 初始化各层级记忆
         self.short_term = ShortTermMemory(
@@ -71,6 +73,7 @@ class MemoryManager:
             max_stages=medium_term_max
         )
         self.long_term = LongTermMemory(
+            embeddings=self.embeddings,
             collection_name=long_term_collection
         ) if enable_long_term else None
 
@@ -79,12 +82,12 @@ class MemoryManager:
         self._enable_long_term = enable_long_term
 
     def remember(
-        self,
-        key: str,
-        value: Any,
-        memory_type: MemoryType = MemoryType.SHORT,
-        metadata: Optional[Dict] = None,
-        tags: Optional[List[str]] = None
+            self,
+            key: str,
+            value: Any,
+            memory_type: MemoryType = MemoryType.SHORT,
+            metadata: Optional[Dict] = None,
+            tags: Optional[List[str]] = None
     ) -> None:
         """
         存储记忆
@@ -119,10 +122,10 @@ class MemoryManager:
             self.short_term.add(key, value, metadata)
 
     def recall(
-        self,
-        key: str,
-        memory_type: Optional[MemoryType] = None,
-        default: Any = None
+            self,
+            key: str,
+            memory_type: Optional[MemoryType] = None,
+            default: Any = None
     ) -> Optional[Any]:
         """
         回忆记忆

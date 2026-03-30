@@ -7,6 +7,7 @@
 """
 from typing import Dict, Type, List, Optional
 
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
@@ -175,21 +176,21 @@ def _convert_messages(messages: List[Dict[str, str]]):
 
 
 ################################# 获取嵌入模型实例 #################################
-def get_embedding_client(provider: ClientType, config: AIConfig):
+def get_embedding_client(config: AIConfig) -> Embeddings:
     """
     获取指定 LLM 客户端的嵌入模型实例
 
     Args:
-        provider: 支持 'openai', 'ollama', 'deepseek', 'qwen'
+        支持 'openai', 'ollama', 'deepseek', 'qwen'
         config: 传递给具体客户端的参数（如 model, temperature, api_key 等）
     Returns:
         嵌入模型实例
     """
-    client = get_client(provider, config)
+    client = get_client(detect_ai_provider_by_url(config.base_url), config)
     return client.llm_embed()
 
 
-def get_default_embedding_client(**kwargs):
+def get_default_embedding(**kwargs) -> Optional[Embeddings]:
     # 获取配置
     try:
         ai_config = settings.get_embedding_config()
@@ -234,20 +235,19 @@ def _get_default_embedding_client(ai_config, **kwargs):
     return client.llm_embed()
 
 
-def embed_client_query(provider: ClientType, text: str, config: AIConfig = None, **kwargs) -> List[float]:
+def embed_client_query(text: str, config: AIConfig, **kwargs) -> List[float]:
     """
     获取指定 LLM 客户端的文本嵌入向量
 
     Args:
-        provider: 支持 'openai', 'ollama', 'deepseek', 'qwen'
+        支持 'openai', 'ollama', 'deepseek', 'qwen'
         config: 传递给具体客户端的参数（如 model, temperature, api_key 等）
         text: 需要嵌入的文本
     Returns:
         文本嵌入向量
     """
     fin_config = _fill_default_config(config, **kwargs)
-
-    client = get_embedding_client(provider, fin_config)
+    client = get_embedding_client(fin_config)
     return client.embed_query(text)
 
 

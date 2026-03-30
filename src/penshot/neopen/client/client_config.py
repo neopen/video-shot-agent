@@ -10,6 +10,7 @@ from enum import Enum, unique
 from random import Random
 from typing import Optional, List
 
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseLanguageModel
 from pydantic import SecretStr
 
@@ -105,6 +106,13 @@ class AIConfig:
     cinematic_knowledge: bool = True
     pacing_principles: bool = True
 
+    # LLM
     def get_llm_by_config(self) -> Optional[BaseLanguageModel]:
         from penshot.neopen.client.client_factory import get_llm_client, get_default_llm
         return get_llm_client(self) if self.model_name and self.base_url else get_default_llm()
+
+    # Embeddings
+    def get_emd_by_config(self) -> Optional[Embeddings]:
+        from penshot.neopen.client.client_factory import get_embedding_client, get_default_embedding
+        return get_embedding_client(self) if self.base_url else get_default_embedding()
+

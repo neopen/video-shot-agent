@@ -40,6 +40,7 @@ class MultiAgentPipeline:
         self.memory = MemorySaver()  # 状态记忆器
         self.config = config or ShotConfig()
         self.llm = self.config.get_llm_by_config()
+        self.embeddings = self.config.get_emd_by_config()
         self._init_agents()
         self.workflow = self._build_workflow()
 
@@ -60,7 +61,8 @@ class MultiAgentPipeline:
             video_splitter=self.video_splitter,
             prompt_converter=self.prompt_converter,
             quality_auditor=self.quality_auditor,
-            llm=self.llm
+            llm=self.llm,
+            embeddings=self.embeddings
         )
         # 工作流决策函数
         self.decision_funcs = PipelineDecision()

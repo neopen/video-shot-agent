@@ -27,7 +27,7 @@ from penshot.utils.log_utils import print_log_exception
 class WorkflowNodes:
     """工作流节点集合，封装所有工作流执行功能"""
 
-    def __init__(self, script_parser, shot_segmenter, video_splitter, prompt_converter, quality_auditor, llm):
+    def __init__(self, script_parser, shot_segmenter, video_splitter, prompt_converter, quality_auditor, llm, embeddings):
         """
         初始化工作流节点集合
         
@@ -40,9 +40,11 @@ class WorkflowNodes:
             llm: 语言模型实例（可选）
         """
         self.llm = llm
+        self.embeddings = embeddings
         # 初始化记忆管理器时配置记忆层级
         self.memory = MemoryManager(
             llm=self.llm,
+            embeddings=self.embeddings,
             enable_long_term=True,
             short_term_size=20,  # 短期记忆容量
             medium_term_max=100,  # 中期记忆最大条目

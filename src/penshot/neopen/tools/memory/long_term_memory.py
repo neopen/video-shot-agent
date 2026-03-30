@@ -12,12 +12,14 @@ from typing import List, Dict, Any, Optional
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 
 
 class LongTermMemory:
     """长期记忆 - 基于向量数据库，支持持久化和元数据过滤"""
 
-    def __init__(self, collection_name: str = "penshot_memory", persist_directory: Optional[str] = None):
+    def __init__(self, embeddings: Embeddings, collection_name: str = "penshot_memory",
+        persist_directory: Optional[str] = "data/output/memory"):
         """
         初始化长期记忆
 
@@ -25,7 +27,7 @@ class LongTermMemory:
             collection_name: 集合名称
             persist_directory: 持久化目录
         """
-        self.embeddings = OpenAIEmbeddings()
+        self.embeddings = embeddings or OpenAIEmbeddings()
         self.collection_name = collection_name
         self.persist_directory = persist_directory
 
