@@ -4,11 +4,12 @@ English | [中文](../README.md)
 
 A multi-agent collaborative storyboard generation system that splits scripts in various formats into short AI-generatable video script units, outputs high-quality shot fragment descriptions, and preserves narrative continuity. It supports multiple AI providers, is highly extensible and easy to use. 
 
-Using LangChain + LangGraph, any format script can be parsed and converted into "Text to Video" script prompt words that conform to the model (5-20 seconds), while maintaining the continuity and consistency of the character story between the segments. It can be directly applied to models such as Sora, Veo, Runway, Pika, Kling, Tongyi Wanxiang, Stable Video Diffusion, etc. It supports MCP, REST API protocols and Function Call, and can be integrated and used through methods such as A2A, LangGraph, API, and Python libraries.
+> Using LangChain + LangGraph, any format script can be parsed and converted into "Text to Video" script prompt words that conform to the model (5-20 seconds), while maintaining the continuity and consistency of the character story between the segments. It can be directly applied to models such as Sora, Veo, Runway, Pika, Kling, Tongyi Wanxiang, Stable Video Diffusion, etc. It supports MCP, REST API protocols and Function Call, and can be integrated and used through methods such as A2A, LangGraph, API, and Python libraries.
+>
 
->
-> Video creation pipeline: Client → LLM script authoring → <u>Storyboard parsing (splitting)</u> → DM video synthesis (text-to-video) → video assembly & rendering (FFmpeg)
->
+
+Video creation pipeline: Client → LLM script authoring → <u>[Storyboard parsing](https://github.com/neopen/video-shot-agent) (splitting)</u> → DM video synthesis (text-to-video) → video assembly & rendering (FFmpeg)
+
 > Note: This agent does not author scripts, does not generate video, nor does it perform final composition in the current version (future releases may add these). The highlighted step above is the agent's responsibility.
 >
 
@@ -70,16 +71,13 @@ cp .env.example .env
 Edit the `.env` file and configure the required parameters:
 
 ```properties
-# ================= API CONFIG =================
 # Server host
 API__HOST=localhost
 # Server port
 API__PORT=8000
 
 ########################## LLM CONFIG #########################
-# Supported providers (openai, qwen, deepseek, ollama). A fallback provider will be used if the default provider is unavailable.
-
-# ================= DEFAULT LLM SETTINGS =================
+# Supported providers (openai, qwen, deepseek, ollama).
 LLM__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
 LLM__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 LLM__DEFAULT__MODEL_NAME=qwen-plus
@@ -149,11 +147,8 @@ Example (abbreviated) JSON output structure:
         "model_type": "AudioLDM_3",
         "voice_type": "narration",
         "audio_style": "cinematic",
-        "voice_character": null,
         "voice_description": "ambient sound design only, no voice, pure atmospheric field recording style",
-        "pitch_shift": 0.0,
-        "emotion": "neutral",
-        "previous_audio_id": "audio_014"
+        "emotion": "neutral"
       }
     },
     {
@@ -171,9 +166,7 @@ Example (abbreviated) JSON output structure:
         "model_type": "AudioLDM_3",
         "voice_type": "narration",
         "audio_style": "cinematic",
-        "voice_character": null,
         "voice_description": "no voice, pure environmental atmosphere with ultra-low dynamic range and tactile silence",
-        "pitch_shift": 0.0,
         "emotion": "neutral",
         "previous_audio_id": "audio_001"
       }
@@ -192,7 +185,6 @@ Notes on packaging and installation:
 
 ```sh
 pip install penshot
-# pip install https://github.com/neopen/video-shot-agent/releases/download/v0.2.1/penshot-0.2.1-py3-none-any.whl
 
 # The package defaults to using Ollama; install provider-specific LLM clients as required:
 # pip install langchain-openai  # for OpenAI/DeepSeek
@@ -212,7 +204,7 @@ Configuration notes:
 >    LLM__DEFAULT__MODEL_NAME=gpt-4-turbo-preview
 >    LLM__DEFAULT__TIMEOUT=30
 >    LLM__DEFAULT__MAX_TOKENS=4000
->             
+>                
 >    # ================= LLM Backup config =================
 >    LLM__FALLBACK__BASE_URL=http://localhost:11434
 >    LLM__FALLBACK__MODEL_NAME=qwen3:4b
@@ -228,38 +220,27 @@ Configuration notes:
 
 ```python
 from penshot.api import PenshotFunction
-from penshot.neopen import ShotConfig
 from penshot.neopen.shot_language import Language
 
 async def async_usage():
-    """异步用法示例"""
-    print("\n=== 异步用法示例 ===")
-
-    agent = PenshotFunction(language=Language.ZH, max_concurrent=5)
+    agent = PenshotFunction(language=Language.EN, max_concurrent=5)
 
     script = """
-    早晨，一个女孩在咖啡馆读书，阳光透过窗户...
+	In the morning, a girl was reading in a coffee shop, with sunlight streaming through the window....
     """
 
-    # 异步提交任务
     task_id = agent.breakdown_script_async(
         script,
-        callback=lambda r: print(f"回调: 任务 {r.task_id} 完成")
+        callback=lambda r: print(f"Callback: Task {r.task_id} Completed")
     )
 
-    print(f"任务已提交: {task_id}")
-
-    # 查询状态
     status = agent.get_task_status(task_id)
-    print(f"初始状态: {status.get('status')}")
+    print(f"status: {status.get('status')}")
 
-    # 等待结果
     result = await agent.wait_for_result_async(task_id)
 
-    print(f"最终结果: 成功={result.success}, 状态={result.status}")
+    print(f"success={result.success}, status={result.status}")
     print(f"result={result}")
-
-    return result
 ```
 
 
@@ -269,106 +250,53 @@ You can expose a simple HTTP API endpoint to call the storyboard generator:
 
 ```python
 from penshot.api import PenshotFunction
-from penshot.neopen import ShotConfig
 from penshot.neopen.shot_language import Language
 from penshot.neopen.task.task_models import TaskStatus
 
-def create_web_app(
-        config: Optional[ShotConfig] = None,
-        enable_cors: bool = True
-) -> FastAPI:
-    """
-    创建 Web 应用
-
-    Args:
-        config: 全局配置
-        enable_cors: 是否启用 CORS
-
-    Returns:
-        FastAPI 应用实例
-    """
-
+def create_web_app() -> FastAPI:
     app = FastAPI(
         title="Penshot 分镜生成 API",
-        description="智能分镜视频生成服务",
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc"
     )
 
-    # 初始化服务
-    config = config or ShotConfig()
-    penshot = PenshotFunction(config=config)
+    penshot = PenshotFunction()
 
-    # 启用 CORS
-    if enable_cors:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    # CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.post("/api/generate", response_model=TaskResponse, tags=["Storyboard"])
-    async def generate_storyboard(
-            request: ScriptRequest
-    ):
-        """
-        生成视频分镜（异步）
-
-        提交剧本进行分镜生成，立即返回 task_id
-        """
+    async def generate_storyboard(request: ScriptRequest):
         try:
-            language = Language.ZH if request.language == "zh" else Language.EN
+            task_id = penshot.breakdown_script_async(
+                script_text=request.script_text,
+                language=Language.EN
+            )
 
-            # 确定任务ID
-            task_id = request.task_id
-
-            if request.wait:
-                # 同步模式
-                result = penshot.breakdown_script(
-                    script_text=request.script_text,
-                    task_id=task_id,
-                    language=language,
-                    wait_timeout=request.timeout
-                )
-
-                return TaskResponse(
-                    task_id=result.task_id,
-                    status=result.status,
-                    message="同步处理完成" if result.success else f"处理失败: {result.error}",
-                    created_at=datetime.now(timezone.utc)
-                )
-            else:
-                # 异步模式
-                task_id = penshot.breakdown_script_async(
-                    script_text=request.script_text,
-                    task_id=task_id,
-                    language=language
-                )
-
-                return TaskResponse(
-                    task_id=task_id,
-                    status=TaskStatus.PENDING,
-                    message="任务已提交，请使用 /api/status/{task_id} 查询状态",
-                    created_at=datetime.now(timezone.utc)
-                )
+            return TaskResponse(
+                task_id=task_id,
+                status=TaskStatus.PENDING,
+                message="Task submited，to: /api/status/{task_id}",
+                created_at=datetime.now(timezone.utc)
+            )
 
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"生成失败: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Task error: {str(e)}")
+            
             
     @app.get("/api/result/{task_id}", response_model=TaskResultResponse, tags=["Task"])
     async def get_task_result(task_id: str):
-        """
-        获取任务结果
-
-        - **task_id**: 任务ID
-        """
         result = penshot.get_task_result(task_id)
 
         if not result:
-            raise HTTPException(status_code=404, detail=f"任务不存在或未完成: {task_id}")
+            raise HTTPException(status_code=404, detail=f"not found: {task_id}")
 
         return TaskResultResponse(
             task_id=result.task_id,
@@ -385,34 +313,148 @@ def create_web_app(
 
 The agent can be used as a node in a LangGraph workflow — see the repository docs for examples and wiring instructions.
 
+Sample code：[video-shot-agent/example/langgraph_integration.py at main · neopen/video-shot-agent](https://github.com/neopen/video-shot-agent/blob/main/example/langgraph_integration.py)
+
+
+
 
 ### 4. A2A integration
 
 Integrate the storyboard agent into agent-to-agent workflows where upstream agents provide scripts and downstream agents perform text-to-video generation and editing.
 
-
-## Limitations & outlook
-
-> 1. Relies on external APIs: stable network connectivity is required for LLM providers.
-> 2. AI model limits: generated video quality depends on the capabilities of the chosen video model.
-> 3. Long scripts: very long scripts may need chunked processing.
-> 4. Multi-language: currently optimized for Chinese; other languages need further testing.
-> 5. Uncertain generated durations: actual generated fragment durations may not perfectly match estimates.
-> 6. Continuity challenges: maintaining continuity across fragments can be technically difficult.
-> 7. No online learning: the current version does not learn from user feedback.
-> 8. Error handling: exceptional cases may lead to failure.
-> 9. Audio synchronization: lip sync and environmental audio design require further work.
-> 10. Professional-grade storyboards: achieving director-level output will need iterative improvements.
+Sample code: [video-shot-agent/example/a2a_integration.py at main · neopen/video-shot-agent](https://github.com/neopen/video-shot-agent/blob/main/example/a2a_integration.py)
 
 
-### MVP limitations
 
-1. Simple rules: uses heuristic rules and cannot handle very complex script structures.
-2. No persistent memory: supports single-pass splitting; not designed for iterative long-text splitting.
-3. No learning: does not learn from feedback.
-4. Simple splitting: fragmentation may still produce continuity/duration issues.
-5. Limited customization: fewer parameter options in this version.
-6. Basic error handling: unexpected errors may cause task failure.
+### 5. MCP Client
+
+Sample code: [video-shot-agent/example/mcp_client.py at main · neopen/video-shot-agent](https://github.com/neopen/video-shot-agent/blob/main/example/mcp_client.py)
+
+```python
+# start MCP Server
+python -m penshot.api.mcp_server
+# or
+python -m penshot.api.mcp_server --max-concurrent 5 --queue-size 500
+```
+
+MCPClient
+
+```python
+class MCPClient:
+    def __init__(self, server_module: str = "penshot.api.mcp_server"):
+        self.server_module = server_module
+        self.process: Optional[subprocess.Popen] = None
+        self._request_id = 0
+        self._ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+
+    def start(self):
+        cmd = [sys.executable, "-m", self.server_module]
+
+        self.process = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8',
+            bufsize=1
+        )
+
+        time.sleep(2)
+
+    def _clean_ansi(self, text: str) -> str:
+        return self._ansi_escape.sub('', text)
+
+    def read_json_response(self, timeout: float = 30) -> Optional[dict]:
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            try:
+                import msvcrt
+                if msvcrt.kbhit():
+                    pass
+            except:
+                pass
+
+            try:
+                line = self.process.stdout.readline()
+                if line:
+                    cleaned_line = self._clean_ansi(line).strip()
+                    if cleaned_line and cleaned_line.startswith('{'):
+                        try:
+                            return json.loads(cleaned_line)
+                        except json.JSONDecodeError:
+                            continue
+            except Exception:
+                pass
+
+            time.sleep(0.05)
+
+        return None
+
+    def _call(self, method: str, params: dict = None) -> dict:
+        self._request_id += 1
+        request = {
+            "jsonrpc": "2.0",
+            "id": self._request_id,
+            "method": method,
+            "params": params or {}
+        }
+
+        request_str = json.dumps(request, ensure_ascii=False)
+        try:
+            self.process.stdin.write(request_str + "\n")
+            self.process.stdin.flush()
+        except BrokenPipeError:
+            raise Exception("Server 进程已断开")
+
+        response = self.read_json_response()
+        if response is None:
+            stderr = self.process.stderr.read()
+            raise Exception(f"Server 无响应: {stderr}")
+
+        return response
+
+    def breakdown_script(self, script: str, wait: bool = False, timeout: int = 300) -> dict:
+        result = self._call("tools/call", {
+            "name": "breakdown_script",
+            "arguments": {
+                "script": script.strip(),
+                "language": "en",
+                "wait": wait,
+                "timeout": timeout
+            }
+        })
+
+        if "error" in result:
+            raise Exception(result["error"]["message"])
+
+        content = result.get("result", {}).get("content", [])
+        if content and content[0].get("type") == "text":
+            text_content = content[0]["text"]
+            try:
+                parsed = json.loads(text_content)
+                return parsed
+            except json.JSONDecodeError:
+                return {}
+        return {}
+
+    def get_task_result(self, task_id: str) -> dict:
+        result = self._call("tools/call", {
+            "name": "get_task_result",
+            "arguments": {"task_id": task_id}
+        })
+
+        content = result.get("result", {}).get("content", [])
+        if content and content[0].get("type") == "text":
+            return json.loads(content[0]["text"])
+        return {}
+```
+
+
+
+
+## Outlook
 
 
 ### Short-term roadmap
