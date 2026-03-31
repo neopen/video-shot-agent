@@ -267,6 +267,34 @@ class BasicViolation(BaseModel):
         description="改进建议"
     )
 
+    def dict(self) -> Dict[str, Any]:
+        """转换为字典，用于存储到记忆"""
+        return {
+            "rule_code": self.rule_code,
+            "rule_name": self.rule_name,
+            "issue_type": self.issue_type.value if self.issue_type else "other",
+            "description": self.description,
+            "severity": self.severity.value if self.severity else "warning",
+            "fragment_id": self.fragment_id,
+            "suggestion": self.suggestion,
+            "source_node": self.source_node.value if self.source_node else None
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'BasicViolation':
+        """从字典创建实例"""
+        return cls(
+            rule_code=data.get("rule_code", ""),
+            rule_name=data.get("rule_name", ""),
+            issue_type=IssueType(data.get("issue_type", "other")),
+            description=data.get("description", ""),
+            severity=SeverityLevel(data.get("severity", "warning")),
+            fragment_id=data.get("fragment_id"),
+            suggestion=data.get("suggestion"),
+            source_node=PipelineNode(data.get("source_node")) if data.get("source_node") else None
+        )
+
+
 
 class QualityRepairParams(BaseModel):
     fix_needed: bool = Field(

@@ -163,22 +163,22 @@ class QualityAuditorAgent:
 
         # 分类报告中的每个问题
         for violation in report.violations:
+            # 确保获取 issue_type
+            issue_type = self._get_issue_type(violation)
+            severity = self._get_severity(violation)
+            source = self._get_source_node(violation)
+
             # 按类型分类
-            if violation.issue_type in issues_by_type:
-                issues_by_type[violation.issue_type].append(violation)
+            if issue_type in issues_by_type:
+                issues_by_type[issue_type].append(violation)
             else:
                 issues_by_type[IssueType.OTHER].append(violation)
 
             # 按严重程度分类
-            severity = violation.severity
             if severity in issues_by_severity:
                 issues_by_severity[severity].append(violation)
 
-            # 按来源分类（优先使用问题自带的source_node）
-            source = getattr(violation, 'source_node', None)
-            if not source:
-                source = self.issue_source_mapping.get(violation.issue_type, PipelineNode.CONVERT_PROMPT)
-
+            # 按来源分类
             if source in issues_by_source:
                 issues_by_source[source].append(violation)
             else:
@@ -326,7 +326,6 @@ class QualityAuditorAgent:
                             f"此问题历史中曾导致失败，建议优先修复"
                         )
 
-
     def _merge_reports(self, rule_report: QualityAuditReport,
                        llm_report: Optional[QualityAuditReport],
                        instructions: AIVideoInstructions,
@@ -355,36 +354,99 @@ class QualityAuditorAgent:
             if issues:
                 total_stage_issues += len(issues)
                 for issue in issues:
-                    merged.violations.append(issue)
+                    # 确保 issue 是 BasicViolation 对象
+                    if isinstance(issue, dict):
+                        # 如果是字典，转换为 BasicViolation 对象
+                        try:
+                            from penshot.neopen.agent.quality_auditor.quality_auditor_models import BasicViolation
+                            basic_issue = BasicViolation(
+                                rule_code=issue.get("rule_code", ""),
+                                rule_name=issue.get("rule_name", ""),
+                                issue_type=issue.get("issue_type"),
+                                source_node=issue.get("source_node", node),
+                                description=issue.get("description", ""),
+                                severity=issue.get("severity"),
+                                fragment_id=issue.get("fragment_id"),
+                                suggestion=issue.get("suggestion")
+                            )
+                            # 设置来源节点
+                            if not hasattr(basic_issue, 'source_node') or not basic_issue.source_node:
+                                basic_issue.source_node = node
+                            merged.violations.append(basic_issue)
+                        except Exception as e:
+                            error(f"转换问题为 BasicViolation 失败: {e}")
+                            continue
+                    else:
+                        # 已经是对象，直接使用
+                        if not hasattr(issue, 'source_node') or not issue.source_node:
+                            issue.source_node = node
+                        merged.violations.append(issue)
 
                 info(f"合并阶段 {node.value} 的问题: {len(issues)}个")
 
         if total_stage_issues > 0:
             info(f"总共合并各阶段问题: {total_stage_issues}个")
-
-        # 3. 更新分数（如果合并了问题，需要重新计算）
-        if total_stage_issues > 0:
+            # 重新计算分数
             merged.score = self._calculate_weighted_score(merged.violations)
 
         return merged
 
-    def _calculate_weighted_score(self, violations: List[BasicViolation]) -> float:
-        """根据问题计算加权分数"""
+    def _calculate_weighted_score(self, violations: List) -> float:
+        """
+        根据问题计算加权分数
+
+        Args:
+            violations: BasicViolation 对象列表或字典列表
+        """
         base_score = 100.0
+
         for violation in violations:
-            penalty = self.severity_weights.get(violation.severity, 5)
-            base_score -= penalty
+            try:
+                # 处理字典类型
+                if isinstance(violation, dict):
+                    severity = violation.get("severity")
+                    # 如果 severity 是字典，可能包含 value 属性
+                    if hasattr(severity, 'value'):
+                        severity = severity.value
+                    elif isinstance(severity, dict):
+                        severity = severity.get("value", "warning")
+                    else:
+                        severity = str(severity) if severity else "warning"
+                else:
+                    # 处理 BasicViolation 对象
+                    severity = violation.severity
+                    if hasattr(severity, 'value'):
+                        severity = severity.value
+                    elif hasattr(severity, '__str__'):
+                        severity = str(severity)
+
+                # 获取权重
+                penalty = self.severity_weights.get(severity, 5)
+                base_score -= penalty
+
+            except Exception as e:
+                debug(f"计算分数时出错: {e}, violation类型: {type(violation)}")
+                base_score -= 5  # 默认扣5分
+
         return max(0.0, min(100.0, base_score))
-
-
 
     def _get_type_summary(self, issues: List[BasicViolation]) -> Dict[str, int]:
         """获取问题类型摘要"""
         summary = {}
         for issue in issues:
-            type_str = issue.issue_type.value if issue.issue_type else "unknown"
+            if isinstance(issue, dict):
+                issue_type = issue.get("issue_type")
+                if isinstance(issue_type, dict):
+                    type_str = issue_type.get("value", "unknown")
+                elif isinstance(issue_type, str):
+                    type_str = issue_type
+                else:
+                    type_str = "unknown"
+            else:
+                type_str = issue.issue_type.value if issue.issue_type else "unknown"
             summary[type_str] = summary.get(type_str, 0) + 1
         return summary
+
 
     def _collect_suggestions(self, issues: List) -> Dict[str, List[str]]:
         """收集修复建议"""
@@ -405,7 +467,25 @@ class QualityAuditorAgent:
         """获取严重程度摘要"""
         summary = {severity.value: 0 for severity in SeverityLevel}
         for issue in issues:
-            summary[issue.severity.value] = summary.get(issue.severity.value, 0) + 1
+            # 判断 issue 是字典还是对象
+            if isinstance(issue, dict):
+                severity_value = issue.get("severity")
+                # 处理 severity 可能是字典或字符串的情况
+                if isinstance(severity_value, dict):
+                    severity_str = severity_value.get("value", "warning")
+                elif isinstance(severity_value, str):
+                    severity_str = severity_value
+                else:
+                    severity_str = "warning"
+            else:
+                # 对象类型
+                severity_value = issue.severity
+                if hasattr(severity_value, 'value'):
+                    severity_str = severity_value.value
+                else:
+                    severity_str = str(severity_value) if severity_value else "warning"
+
+            summary[severity_str] = summary.get(severity_str, 0) + 1
         return summary
 
     def _post_process_report(self, report: QualityAuditReport) -> QualityAuditReport:
@@ -487,3 +567,51 @@ class QualityAuditorAgent:
             stats={SeverityLevel.ERROR.value: fragment_count},
             score=0.0
         )
+
+    def _get_issue_type(self, violation) -> IssueType:
+        """获取问题类型"""
+        if isinstance(violation, dict):
+            issue_type = violation.get("issue_type")
+            if isinstance(issue_type, dict):
+                return IssueType(issue_type.get("value", "other"))
+            if isinstance(issue_type, str):
+                try:
+                    return IssueType(issue_type)
+                except ValueError:
+                    return IssueType.OTHER
+            return IssueType.OTHER
+        else:
+            return violation.issue_type
+
+    def _get_severity(self, violation) -> SeverityLevel:
+        """获取严重程度"""
+        if isinstance(violation, dict):
+            severity = violation.get("severity")
+            if isinstance(severity, dict):
+                return SeverityLevel(severity.get("value", "warning"))
+            if isinstance(severity, str):
+                try:
+                    return SeverityLevel(severity)
+                except ValueError:
+                    return SeverityLevel.WARNING
+            return SeverityLevel.WARNING
+        else:
+            return violation.severity
+
+    def _get_source_node(self, violation) -> PipelineNode:
+        """获取来源节点"""
+        if isinstance(violation, dict):
+            source = violation.get("source_node")
+            if source:
+                if isinstance(source, str):
+                    try:
+                        return PipelineNode(source)
+                    except ValueError:
+                        pass
+                return PipelineNode.CONVERT_PROMPT
+            return PipelineNode.CONVERT_PROMPT
+        else:
+            source = getattr(violation, 'source_node', None)
+            if source:
+                return source
+            return self.issue_source_mapping.get(violation.issue_type, PipelineNode.CONVERT_PROMPT)

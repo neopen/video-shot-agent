@@ -303,19 +303,19 @@ class WorkflowOutputWriter:
         """保存记忆统计报告"""
         try:
             # 获取记忆统计
-            memory_stats = self.memory.get_stats()
-            most_accessed = self.memory.get_most_accessed(5)
+            memory_stats = self.memory.get_stats(task_id=task_id)
+            most_accessed = self.memory.get_most_accessed(5, task_id=task_id)
 
             memory_report = {
                 "task_id": task_id,
                 "memory_statistics": memory_stats,
                 "most_accessed": most_accessed,
-                "short_term_size": self.memory.short_term.size() if hasattr(self.memory, 'short_term') else 0,
-                "medium_term_stages": len(self.memory.medium_term.stage_memories) if hasattr(self.memory, 'medium_term') else 0,
-                "long_term_enabled": self.memory.long_term is not None
+                "short_term_size": memory_stats.get("short_term", {}).get("current_size", 0),
+                "medium_term_stages": memory_stats.get("medium_term", {}).get("stage_count", 0),
+                "long_term_enabled": memory_stats.get("long_term", {}).get("enabled", False)
             }
 
-            await self._save_json_async(task_id, memory_report, "memory_report.json")
+            self.storage.save_json_result(task_id, memory_report, "memory_report.json")
             debug(f"记忆报告已保存: {task_id}")
         except Exception as e:
             error(f"保存记忆报告失败: {e}")

@@ -80,6 +80,9 @@ class WorkflowNodes:
         功能：将原始剧本解析为结构化元素序列，支持修复参数
         """
         try:
+            # 设置当前任务ID
+            self.memory.set_task_id(state.task_id)
+
             # 更新状态：开始解析
             self._update_task_status(state.task_id, TaskStatus.PROCESSING)
             self._update_task_progress(state.task_id, TaskStage.PARSING_START, 0)
@@ -210,6 +213,8 @@ class WorkflowNodes:
         功能：将结构化剧本拆分为视觉镜头，支持修复参数
         """
         try:
+            # 设置当前任务ID
+            self.memory.set_task_id(state.task_id)
             # 更新状态：开始拆分
             self._update_task_progress(state.task_id, TaskStage.SEGMENT_START, 0)
 
@@ -352,6 +357,8 @@ class WorkflowNodes:
         功能：将镜头按限制切分为AI可处理的片段，支持修复参数
         """
         try:
+            # 设置当前任务ID
+            self.memory.set_task_id(state.task_id)
             # 更新状态：开始分段
             self._update_task_progress(state.task_id, TaskStage.SPLIT_START, 0)
 
@@ -501,6 +508,9 @@ class WorkflowNodes:
         功能：为每个片段生成AI视频生成提示词，支持修复参数
         """
         try:
+            # 设置当前任务ID
+            self.memory.set_task_id(state.task_id)
+
             # 更新状态：开始转换
             self._update_task_progress(state.task_id, TaskStage.CONVERT_START, 0)
 
@@ -662,6 +672,8 @@ class WorkflowNodes:
         - 生成增强的修复参数
         - 自动调用各阶段修复器
         """
+        # 设置当前任务ID
+        self.memory.set_task_id(state.task_id)
         # 更新状态：开始审查
         self._update_task_progress(state.task_id, TaskStage.AUDIT_START, 0)
 
@@ -887,7 +899,9 @@ class WorkflowNodes:
         2. 识别连续性问题的来源阶段
         3. 生成修复方案并触发重试
         """
-        info("进入连续性守护节点")
+        # info("进入连续性守护节点")
+        # 设置当前任务ID
+        self.memory.set_task_id(state.task_id)
         # 更新状态：开始检查
         self._update_task_progress(state.task_id, TaskStage.CONTINUITY_START, 0)
 
@@ -933,6 +947,7 @@ class WorkflowNodes:
 
             # 4. 获取问题列表
             continuity_issues = check_result.issues
+            state.continuity_issues = continuity_issues
 
             # 5. 分析问题来源
             issues_by_stage = self._analyze_continuity_issues(continuity_issues, continuity_context)
@@ -1101,7 +1116,10 @@ class WorkflowNodes:
                 "status": "completed"
             })
 
-            # ========== 任务完成，清理所有智能体状态 ==========
+            # ========== 任务完成，清理该任务的记忆 ==========
+            self.memory.clear_task_memory(state.task_id)
+
+            # 清理所有智能体状态
             self.script_parser.clear_all_state()
             self.shot_segmenter.clear_all_state()
             self.video_splitter.clear_all_state()
@@ -1109,6 +1127,7 @@ class WorkflowNodes:
 
             # 可选：清理记忆模块中的短期记忆（任务级）
             # self.memory.clear(memory_type=MemoryType.SHORT)
+            state.continuity_issues = []
 
             info(f"生成输出完成，数据大小: {len(str(output_data))} 字符，阶段更新为 END")
 
@@ -1584,7 +1603,10 @@ class WorkflowNodes:
         return state
 
     def _load_common_patterns(self):
-        """加载常见问题模式到缓存"""
+        """加载常见问题模式到缓存（全局知识，不依赖任务）"""
+        # 这里使用一个特殊的任务ID来存储全局知识
+        self.memory.set_task_id("_global")
+
         common_issues = self.memory.recall("common_parse_issues", memory_type=MemoryType.LONG)
         if common_issues:
             info(f"已加载 {len(common_issues)} 条常见问题模式")
