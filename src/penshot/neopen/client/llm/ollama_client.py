@@ -18,17 +18,17 @@ class OllamaClient(BaseClient):
 
     def __init__(self, config: AIConfig):
         super().__init__(config)
-        self.base_url = config.base_url or "http://localhost:11434"  # Ollama 默认本地地址
+        self.base_url = self.llm_config.base_url or "http://localhost:11434"  # Ollama 默认本地地址
 
     def llm_model(self) -> BaseLanguageModel:
         from langchain_ollama import ChatOllama
         return ChatOllama(
             base_url=self.base_url,
-            model=self.config.model_name,
-            temperature=self.config.temperature,
-            num_predict=self.config.max_tokens * 4,
-            keep_alive=self.config.timeout * 5,
-            seed=self.config.seed,
+            model=self.llm_config.model_name,
+            temperature=self.llm_config.temperature,
+            num_predict=self.llm_config.max_tokens * 4,
+            keep_alive=self.llm_config.timeout * 5,
+            seed=self.llm_config.seed,
             num_thread=8,
             client_kwargs=self._get_model_kwargs(),
         )
@@ -45,8 +45,8 @@ class OllamaClient(BaseClient):
     def llm_embed(self) -> Embeddings:
         from langchain_ollama import OllamaEmbeddings
         return OllamaEmbeddings(
-            model=self.config.model_name,
-            keep_alive=self.config.timeout * 5,
+            model=self.embed_config.model_name,
+            keep_alive=self.embed_config.timeout * 5,
             num_thread=8,
             base_url=self.base_url
         )

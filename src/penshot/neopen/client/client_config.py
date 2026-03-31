@@ -112,35 +112,27 @@ class AIConfig22:
 
 @dataclass
 class AIConfig:
-    llm_config: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
-    embed_config: EmbeddingProviderConfig = Field(default_factory=EmbeddingProviderConfig)
+    llm: LLMProviderConfig = LLMProviderConfig()
+    embed: EmbeddingProviderConfig = EmbeddingProviderConfig()
 
     # 业务开关
     cinematic_knowledge: bool = Field(default=True, description="注入影视领域知识")
     pacing_principles: bool = Field(default=True, description="启用节奏控制原则")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "llm_config": {"model_name": "gpt-4o", "temperature": 0.1},
-                "cinematic_knowledge": True
-            }
-        }
-
     #
     def has_llm_config(self):
-        return self.llm_config and self.llm_config.model_name and self.llm_config.base_url
+        return self.llm and self.llm.model_name and self.llm.base_url
 
     def has_embed_config(self):
-        return self.embed_config and self.embed_config.model_name and self.embed_config.base_url
+        return self.embed and self.embed.model_name and self.embed.base_url
 
     # LLM
     def get_llm_by_config(self) -> Optional[BaseLanguageModel]:
         from penshot.neopen.client.client_factory import get_llm_client, get_default_llm
-        return get_llm_client(self) if self.has_llm_config else get_default_llm()
+        return get_llm_client(self) if self.has_llm_config() else get_default_llm()
 
     # Embeddings
     def get_embed_by_config(self) -> Optional[Embeddings]:
         from penshot.neopen.client.client_factory import get_embedding_client, get_default_embedding
-        return get_embedding_client(self) if self.has_embed_config else get_default_embedding()
+        return get_embedding_client(self) if self.has_embed_config() else get_default_embedding()
 

@@ -14,7 +14,7 @@ class LLMProviderConfig(BaseModel):
     """LLM提供商配置"""
     base_url: str = Field(default="")  # https://api.openai.com/v1
     api_key: SecretStr = Field(default=SecretStr(""))
-    model_name: str = Field(default="gpt-4o")
+    model_name: str = Field(default="") # gpt-4o
     timeout: int = Field(default=60, ge=1)
     response_format: str = Field(default="json_object")
     temperature: float = Field(default=0.1, ge=0.0, le=1.0)

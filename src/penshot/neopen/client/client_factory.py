@@ -60,7 +60,7 @@ def get_client(provider: ClientType, config: AIConfig) -> BaseClient:
 
 
 def get_llm_client(config: AIConfig, **kwargs) -> BaseLanguageModel:
-    return get_llm_client_by_provider(detect_ai_provider_by_url(config.llm_config.base_url), config, **kwargs)
+    return get_llm_client_by_provider(detect_ai_provider_by_url(config.llm.base_url), config, **kwargs)
 
 
 def get_llm_client_by_provider(provider: ClientType, config: AIConfig = None, **kwargs) -> BaseLanguageModel:
@@ -92,7 +92,7 @@ def get_default_llm(**kwargs) -> Optional[BaseLanguageModel]:
             return None
 
 
-def _get_default_llm(ai_config, **kwargs) -> BaseLanguageModel:
+def _get_default_llm(ai_config: LLMProviderConfig, **kwargs) -> BaseLanguageModel:
     """
     获取默认的 LLM 客户端的语言模型实例（默认为 OpenAI）
 
@@ -103,16 +103,7 @@ def _get_default_llm(ai_config, **kwargs) -> BaseLanguageModel:
     provider = detect_ai_provider_by_url(ai_config.base_url)
     info(f"使用AI提供商: {provider}, 模型: {ai_config.model_name}")
 
-    llm_config = LLMProviderConfig(
-        model_name=ai_config.model_name,
-        api_key=ai_config.api_key,
-        base_url=ai_config.base_url,
-        temperature=ai_config.temperature,
-        timeout=ai_config.timeout,
-        max_tokens=ai_config.max_tokens,
-    )
-
-    config = AIConfig(llm_config=llm_config)
+    config = AIConfig(llm=ai_config)
 
     fin_config = _fill_default_config(config, **kwargs)
 
@@ -127,33 +118,26 @@ def _get_default_llm(ai_config, **kwargs) -> BaseLanguageModel:
     return client.llm_model()
 
 
-def _fill_default_config(config: AIConfig = None, **kwargs) -> AIConfig:
+def _fill_default_config(config: AIConfig, **kwargs) -> AIConfig:
     """填充默认配置"""
-    llm_config = LLMProviderConfig(
-        model_name=kwargs.get('model_name', 'gpt-4o'),
-        base_url=kwargs.get('base_url', ""),
-        api_key=kwargs.get("api_key"),
-        temperature=kwargs.get("temperature", 0.1),
-        max_tokens=kwargs.get("max_tokens", 10000),
-    )
-
-    embed_config = EmbeddingProviderConfig(
-        model_name=kwargs.get('model_name', 'gpt-4o'),
-        base_url=kwargs.get('base_url', ""),
-        api_key=kwargs.get("api_key")
-    )
-
-    config = config or AIConfig(
-        llm_config=llm_config,
-        embed_config=embed_config
-    )
-
     if not kwargs:
         return config
 
-    for key, value in kwargs.items():
-        if hasattr(config, key) and value is not None:
-            setattr(config, key, value)
+    llm_config = config.llm or LLMProviderConfig()
+    llm_config.model_name= kwargs.get('model_name', llm_config.model_name)
+    llm_config.base_url=kwargs.get('base_url', llm_config.base_url)
+    llm_config.api_key=kwargs.get("api_key", llm_config.api_key)
+    llm_config.temperature=kwargs.get("temperature", llm_config.temperature)
+    llm_config.max_tokens=kwargs.get("max_tokens", llm_config.max_tokens)
+
+    embed_config = config.embed or EmbeddingProviderConfig()
+    embed_config.model_name=kwargs.get('embed_model_name', embed_config.model_name)
+    embed_config.base_url=kwargs.get('embed_base_url', embed_config.base_url)
+    embed_config.api_key=kwargs.get("embed_api_key", embed_config.api_key)
+
+    config.llm = llm_config
+    config.embed = embed_config
+
     return config
 
 
@@ -200,7 +184,7 @@ def get_embedding_client(config: AIConfig) -> Embeddings:
     Returns:
         嵌入模型实例
     """
-    client = get_client(detect_ai_provider_by_url(config.embed_config.base_url), config)
+    client = get_client(detect_ai_provider_by_url(config.embed.base_url), config)
     return client.llm_embed()
 
 
@@ -220,7 +204,7 @@ def get_default_embedding(**kwargs) -> Optional[Embeddings]:
             return None
 
 
-def _get_default_embedding_client(ai_config, **kwargs):
+def _get_default_embedding_client(ai_config: EmbeddingProviderConfig, **kwargs):
     """
     获取默认的 LLM 客户端的嵌入模型实例（默认为 OpenAI）
 
@@ -230,13 +214,7 @@ def _get_default_embedding_client(ai_config, **kwargs):
     provider = detect_ai_provider_by_url(ai_config.base_url)
     info(f"使用AI提供商: {provider}, 嵌入模型: {ai_config.model_name}")
 
-    embed_config = EmbeddingProviderConfig(
-        model_name=ai_config.model_name,
-        base_url=ai_config.base_url,
-        timeout=ai_config.timeout,
-        api_key=ai_config.api_key
-    )
-    config = AIConfig(embed_config=embed_config)
+    config = AIConfig(embed=ai_config)
 
     fin_config = _fill_default_config(config, **kwargs)
 

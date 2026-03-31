@@ -24,28 +24,28 @@ class QwenClient(BaseClient):
 
     def llm_model(self) -> BaseLanguageModel:
         return ChatTongyi(
-            model=self.config.model_name,
+            model=self.llm_config.model_name,
             model_kwargs=self._get_model_kwargs(),
-            api_key=self.config.api_key,
-            max_retries=self.config.max_retries,
+            api_key=self.llm_config.api_key,
+            max_retries=self.llm_config.max_retries,
             streaming=False,
         )
 
     def llm_embed(self) -> Embeddings:
         return DashScopeEmbeddings(
-            model=self.config.model_name,
-            max_retries=self.config.max_retries,
-            dashscope_api_key=self.config.api_key
+            model=self.embed_config.model_name,
+            max_retries=self.embed_config.max_retries,
+            dashscope_api_key=self.embed_config.api_key.get_secret_value()
         )
 
     def _get_model_kwargs(self):
         """返回模型参数字典"""
         model_kwargs = {
-            "temperature": self.config.temperature,
-            "timeout": self.config.timeout,
+            "temperature": self.llm_config.temperature,
+            "timeout": self.llm_config.timeout,
             # "top_p": config.top_p,
             # "presence_penalty": config.presence_penalty,
             # "frequency_penalty": config.frequency_penalty,
-            "max_tokens": self.config.max_tokens,
+            "max_tokens": self.llm_config.max_tokens,
         }
         return model_kwargs
