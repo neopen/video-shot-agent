@@ -19,7 +19,7 @@ from penshot.neopen.agent.quality_auditor.quality_auditor_models import AuditSta
 from penshot.neopen.agent.workflow.workflow_models import AgentStage, PipelineNode
 from penshot.neopen.agent.workflow.workflow_output import WorkflowOutputWriter
 from penshot.neopen.agent.workflow.workflow_states import WorkflowState
-from penshot.neopen.task.task_models import TaskStage
+from penshot.neopen.task.task_models import TaskStage, TaskStatus
 from penshot.neopen.tools.memory.memory_manager import MemoryManager, MemoryType
 from penshot.neopen.tools.result_storage_tool import create_result_storage
 from penshot.utils.log_utils import print_log_exception
@@ -81,6 +81,7 @@ class WorkflowNodes:
         """
         try:
             # 更新状态：开始解析
+            self._update_task_status(state.task_id, TaskStatus.PROCESSING)
             self._update_task_progress(state.task_id, TaskStage.PARSING_START, 0)
 
             # ========== 1. 加载历史上下文 ==========
@@ -1578,13 +1579,21 @@ class WorkflowNodes:
         """加载常见问题模式到缓存"""
         common_issues = self.memory.recall("common_parse_issues", memory_type=MemoryType.LONG)
         if common_issues:
-            debug(f"已加载 {len(common_issues)} 条常见问题模式")
+            info(f"已加载 {len(common_issues)} 条常见问题模式")
 
         repair_patterns = self.memory.recall("repair_success_patterns", memory_type=MemoryType.LONG)
         if repair_patterns:
-            debug(f"已加载 {len(repair_patterns)} 条修复成功模式")
+            info(f"已加载 {len(repair_patterns)} 条修复成功模式")
 
     # ============================= 节点任务状态 =============================
+    def _update_task_status(self, task_id: str, status: TaskStatus):
+        """更新任务状态"""
+        try:
+            if self.task_manager:
+                self.task_manager.update_task_status(task_id, status)
+        except Exception as e:
+            warning(f"更新任务状态失败: {e}")
+
     def _update_task_progress(self, task_id: str, stage: TaskStage, progress: float = None, details: Dict = None):
         """更新任务进度"""
         try:
@@ -1592,7 +1601,7 @@ class WorkflowNodes:
                 # 使用枚举的 code 属性
                 self.task_manager.update_task_progress_detail(task_id, stage.code, progress, details)
         except Exception as e:
-            debug(f"更新任务进度失败: {e}")
+            warning(f"更新任务进度失败: {e}")
 
     def _complete_stage(self, task_id: str, stage: TaskStage, result: Dict = None):
         """完成阶段"""
@@ -1600,7 +1609,7 @@ class WorkflowNodes:
             if self.task_manager:
                 self.task_manager.complete_stage(task_id, stage.code, result)
         except Exception as e:
-            debug(f"完成阶段失败: {e}")
+            warning(f"完成阶段失败: {e}")
 
     def _fail_stage(self, task_id: str, stage: TaskStage, error: str):
         """阶段失败"""
@@ -1609,4 +1618,4 @@ class WorkflowNodes:
                 self.task_manager.update_task_progress_detail(task_id, TaskStage.ERROR_HANDLING.code, 0, {"error": error})
                 self.task_manager.fail_task(task_id, f"{stage.name}失败: {error}")
         except Exception as e:
-            debug(f"记录阶段失败失败: {e}")
+            warning(f"记录阶段失败失败: {e}")

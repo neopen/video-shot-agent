@@ -17,7 +17,7 @@ from penshot.logger import info, error, debug
 from penshot.neopen.shot_config import ShotConfig
 from penshot.neopen.shot_language import Language
 from penshot.neopen.task.task_manager import TaskManager
-from penshot.neopen.task.task_models import ProcessingStatus, TaskStatus, TaskResponse, BatchTaskResponse
+from penshot.neopen.task.task_models import ProcessingStatus, TaskStatus, TaskResponse, BatchTaskResponse, TaskStage
 from penshot.neopen.task.task_processor import AsyncTaskProcessor, TaskPriority
 from penshot.utils.log_utils import print_log_exception
 
@@ -239,14 +239,39 @@ class TaskFactory:
             except Exception:
                 updated_at = None
 
+        # 获取状态
+        status = task.get("status", TaskStatus.PENDING)
+        if isinstance(status, str):
+            try:
+                status = TaskStatus(status)
+            except ValueError:
+                status = TaskStatus.UNKNOWN
+
+        # 获取当前阶段
+        current_stage = task.get("current_stage")
+        progress = task.get("progress", 0)
+
+        # 获取阶段进度详情
+        progress_details = task.get("progress_details", {})
+        stages_progress = {}
+        for stage_code, detail in progress_details.items():
+            stage = TaskStage.from_code(stage_code)
+            if stage:
+                stages_progress[stage.name] = detail
+            else:
+                stages_progress[stage_code] = detail
+
         return ProcessingStatus(
             task_id=task_id,
-            status=task.get("status", TaskStatus.PENDING),
-            stage=task.get("stage"),
-            progress=task.get("progress"),
+            status=status,
+            stage=current_stage or task.get("stage"),
+            stage_name=TaskStage.from_code(current_stage).name if current_stage else None,
+            progress=progress,
             created_at=created_at,
             updated_at=updated_at,
-            error_message=task.get("error")
+            error_message=task.get("error"),
+            current_stage=current_stage,
+            stages_progress=stages_progress
         )
 
     def get_result(self, task_id: str) -> Optional[TaskResponse]:

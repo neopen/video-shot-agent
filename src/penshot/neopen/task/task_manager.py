@@ -14,21 +14,20 @@ from __future__ import annotations
 import copy
 import json
 import uuid
+from collections import OrderedDict
 from dataclasses import is_dataclass
 from datetime import datetime, timezone, timedelta
 from threading import RLock
-from collections import OrderedDict
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from typing import Optional, Dict, Any, List
 
 from penshot.logger import info, error
+# if TYPE_CHECKING:
+from penshot.neopen.agent.workflow.workflow_pipeline import MultiAgentPipeline
+from penshot.neopen.shot_config import ShotConfig
 from penshot.neopen.task.task_models import TaskStatus, TaskStage
 from penshot.utils.log_utils import print_log_exception
 from penshot.utils.obj_utils import obj_to_dict
 from penshot.utils.redis_utils import RedisClient
-
-if TYPE_CHECKING:
-    from penshot.neopen.agent import MultiAgentPipeline
-from penshot.neopen.shot_config import ShotConfig
 
 
 class TaskManager:
@@ -255,7 +254,6 @@ class TaskManager:
                         pass
                 self._local_tasks[task_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-
     def update_task_progress_detail(
             self,
             task_id: str,
@@ -272,6 +270,9 @@ class TaskManager:
             progress: 该阶段进度百分比
             details: 阶段详细信息
         """
+        # 获取阶段代码（作为字典键）
+        stage_code = stage.code
+
         if self.use_redis and self.redis:
             key = self._redis_key(task_id)
             raw = self.redis.get(key)
@@ -282,9 +283,14 @@ class TaskManager:
             except Exception:
                 return False
 
+            # 确保状态为 PROCESSING（如果不是终态）
+            current_status = rec.get("status")
+            if current_status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value]:
+                rec["status"] = TaskStatus.PROCESSING.value
+
             # 更新当前阶段
-            rec["current_stage"] = stage.value
-            rec["stage"] = stage.value  # 兼容旧版
+            rec["current_stage"] = stage_code
+            rec["stage"] = stage_code
             rec["updated_at"] = datetime.now(timezone.utc).isoformat()
 
             # 初始化进度详情
@@ -292,15 +298,15 @@ class TaskManager:
                 rec["progress_details"] = {}
 
             # 更新阶段进度
-            if stage.value not in rec["progress_details"]:
-                rec["progress_details"][stage.value] = {
-                    "name": self._get_stage_name(stage),
+            if stage_code not in rec["progress_details"]:
+                rec["progress_details"][stage_code] = {
+                    "name": stage.name,
                     "progress": 0,
                     "status": "processing",
                     "started_at": datetime.now(timezone.utc).isoformat()
                 }
 
-            stage_detail = rec["progress_details"][stage.value]
+            stage_detail = rec["progress_details"][stage_code]
             if progress is not None:
                 stage_detail["progress"] = progress
             if details:
@@ -318,22 +324,28 @@ class TaskManager:
                     return False
 
                 rec = self._local_tasks[task_id]
-                rec["current_stage"] = stage.value
-                rec["stage"] = stage.value
+
+                # 确保状态为 PROCESSING
+                current_status = rec.get("status")
+                if current_status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value]:
+                    rec["status"] = TaskStatus.PROCESSING.value
+
+                rec["current_stage"] = stage_code
+                rec["stage"] = stage_code
                 rec["updated_at"] = datetime.now(timezone.utc).isoformat()
 
                 if "progress_details" not in rec:
                     rec["progress_details"] = {}
 
-                if stage.value not in rec["progress_details"]:
-                    rec["progress_details"][stage.value] = {
-                        "name": self._get_stage_name(stage),
+                if stage_code not in rec["progress_details"]:
+                    rec["progress_details"][stage_code] = {
+                        "name": stage.name,
                         "progress": 0,
                         "status": "processing",
                         "started_at": datetime.now(timezone.utc).isoformat()
                     }
 
-                stage_detail = rec["progress_details"][stage.value]
+                stage_detail = rec["progress_details"][stage_code]
                 if progress is not None:
                     stage_detail["progress"] = progress
                 if details:
@@ -342,6 +354,7 @@ class TaskManager:
                 rec["progress"] = self._calculate_overall_progress(rec["progress_details"])
 
                 return True
+
 
     def complete_stage(
             self,
@@ -431,7 +444,6 @@ class TaskManager:
                         max_progress = stage_progress
 
         return min(100, max_progress)
-
 
     def update_task_result(self, task_id: str, partial_result: Dict[str, Any]) -> bool:
         if self.use_redis and self.redis:
@@ -1009,5 +1021,38 @@ class TaskManager:
         return False
 #     ============================ 恢复任务 ================================
 
+    # task_manager.py - 添加 update_task_status 方法
+
+    def update_task_status(self, task_id: str, status: TaskStatus) -> bool:
+        """
+        更新任务状态
+
+        Args:
+            task_id: 任务ID
+            status: 新状态
+        """
+        if self.use_redis and self.redis:
+            key = self._redis_key(task_id)
+            raw = self.redis.get(key)
+            if not raw:
+                return False
+            try:
+                rec = json.loads(raw)
+            except Exception:
+                return False
+
+            rec["status"] = status.value if hasattr(status, 'value') else status
+            rec["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+            self.redis.setex(key, self.task_ttl_seconds, json.dumps(rec, ensure_ascii=False))
+            return True
+        else:
+            with self._lock:
+                if task_id not in self._local_tasks:
+                    return False
+
+                self._local_tasks[task_id]["status"] = status.value if hasattr(status, 'value') else status
+                self._local_tasks[task_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
+                return True
 
 # end of TaskManager

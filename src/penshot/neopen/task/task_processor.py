@@ -243,6 +243,7 @@ class AsyncTaskProcessor:
             new_avg = (current_avg * total + wait_ms) / (total + 1)
             self._stats["avg_wait_time_ms"] = new_avg
 
+    # task_processor.py - 修改 _execute_task 方法
 
     async def _execute_task(self, queued_task: QueuedTask):
         """执行单个任务"""
@@ -253,6 +254,10 @@ class AsyncTaskProcessor:
         try:
             async with self._semaphore:
                 debug(f"开始执行任务: {task_id}, 活跃任务数: {self._active_count}")
+
+                # 更新任务状态为 PROCESSING
+                self.task_manager.update_task_status(task_id, TaskStatus.PROCESSING)
+                self.task_manager.update_task_progress_detail(task_id, TaskStage.INIT, 0)
 
                 # 执行实际的任务处理
                 result = await self._process_script_task_internal(task_id)
@@ -275,12 +280,14 @@ class AsyncTaskProcessor:
             self._stats["total_cancelled"] += 1
             warning(f"任务被取消: {task_id}")
             self.task_manager.fail_task(task_id, "任务被取消")
+            self.task_manager.update_task_status(task_id, TaskStatus.CANCELLED)
 
         except Exception as e:
             self._stats["total_failed"] += 1
             error(f"任务执行失败: {task_id}, 错误: {str(e)}")
             print_log_exception()
             self.task_manager.fail_task(task_id, str(e))
+            self.task_manager.update_task_status(task_id, TaskStatus.FAILED)
 
         finally:
             self._active_count -= 1
@@ -350,6 +357,7 @@ class AsyncTaskProcessor:
 
         except Exception as e:
             error(f"任务处理失败: {task_id}, 错误: {str(e)}")
+            print_log_exception()
             self.task_manager.update_task_progress_detail(task_id, TaskStage.ERROR_HANDLING, 0, {"error": str(e)})
 
             return TaskResponse(
