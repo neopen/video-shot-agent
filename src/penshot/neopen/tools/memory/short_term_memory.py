@@ -1,160 +1,139 @@
 """
 @FileName: short_term_memory.py
-@Description: 短期记忆 - 滑动窗口 + TTL过期
+@Description: 短期记忆 - 基于LangChain的缓冲记忆
 @Author: HiPeng
-@Github: https://github.com/neopen/video-shot-agent
-@Time: 2026/3/30 13:06
+@Time: 2026/4/1
 """
-import time
-from collections import deque, OrderedDict
-from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Optional, Any, Dict, List
+from collections import deque
+
+from langchain.memory import ConversationBufferMemory
+from langchain.memory.chat_message_histories import RedisChatMessageHistory
+from langchain.schema import HumanMessage, AIMessage
+
+from penshot.logger import debug, warning
+from penshot.neopen.tools.memory.memory_models import MemoryConfig
 
 
 class ShortTermMemory:
-    """短期记忆 - 基于滑动窗口，支持TTL过期"""
+    """短期记忆 - 基于LangChain的缓冲记忆"""
 
-    def __init__(self, max_size: int = 10, ttl_seconds: int = 3600):
-        """
-        初始化短期记忆
+    def __init__(self, config: MemoryConfig, script_id: str):
+        self.config = config
+        self.script_id = script_id
+        self.max_size = config.short_term_size
 
-        Args:
-            max_size: 最大记忆条数
-            ttl_seconds: 记忆存活时间（秒），默认1小时
-        """
-        self.max_size = max_size
-        self.ttl_seconds = ttl_seconds
-        self.buffer = deque(maxlen=max_size)
-        self.current_context: OrderedDict[str, Any] = OrderedDict()
-        self._timestamps: Dict[str, float] = {}
+        # 初始化消息历史（可选Redis持久化）
+        if config.short_term_redis_url:
+            message_history = RedisChatMessageHistory(
+                session_id=f"{script_id}_short_term",
+                url=config.short_term_redis_url,
+                key_prefix="penshot:memory:",
+                ttl=config.short_term_ttl
+            )
+        else:
+            message_history = None
 
-    def add(self, key: str, value: Any, metadata: Optional[Dict] = None) -> None:
-        """添加记忆"""
-        # 清理过期记忆
-        self._clean_expired()
+        # 创建缓冲记忆（不设置k参数）
+        self.memory = ConversationBufferMemory(
+            chat_memory=message_history,
+            return_messages=True,
+            memory_key="history",
+            input_key="input",
+            output_key="output"
+        )
 
-        # 更新当前上下文
-        self.current_context[key] = value
-        self._timestamps[key] = time.time()
+        # 手动维护滑动窗口
+        self._message_buffer = deque(maxlen=config.short_term_size)
 
-        # 移动到末尾（LRU）
-        self.current_context.move_to_end(key)
+        debug(f"初始化短期记忆: script={script_id}, size={config.short_term_size}")
 
-        # 添加到缓冲区
-        self.buffer.append({
-            "key": key,
-            "value": value,
-            "metadata": metadata or {},
-            "timestamp": datetime.now().isoformat(),
-            "timestamp_epoch": time.time()
+    def add(self, input_text: str, output_text: str, metadata: Optional[Dict] = None):
+        """添加交互"""
+        # 保存到LangChain记忆
+        self.memory.save_context(
+            {"input": input_text},
+            {"output": output_text}
+        )
+
+        # 手动维护滑动窗口
+        self._message_buffer.append({
+            "input": input_text,
+            "output": output_text,
+            "metadata": metadata,
+            "timestamp": None  # 可以添加时间戳
         })
 
-        # 限制缓冲区大小
-        if len(self.buffer) > self.max_size:
-            removed = self.buffer.popleft()
-            # 从上下文移除最旧的
-            if removed["key"] in self.current_context:
-                del self.current_context[removed["key"]]
-                del self._timestamps[removed["key"]]
+        # 如果超过最大大小，从LangChain记忆中移除最旧的消息
+        if len(self._message_buffer) > self.max_size:
+            self._trim_memory()
 
-    def get(self, key: str) -> Optional[Any]:
-        """获取记忆，同时更新访问时间（LRU）"""
-        self._clean_expired()
+    def _trim_memory(self):
+        """修剪记忆，保持滑动窗口大小"""
+        # 注意：ConversationBufferMemory 没有直接删除消息的方法
+        # 这里通过重新构建记忆来实现
+        try:
+            # 获取最近的消息
+            recent_messages = list(self._message_buffer)[-self.max_size:]
 
-        if key in self.current_context:
-            # 更新访问时间
-            self.current_context.move_to_end(key)
-            self._timestamps[key] = time.time()
-            return self.current_context[key]
-        return None
+            # 清空并重新添加
+            self.clear()
 
-    def get_with_metadata(self, key: str) -> Optional[Dict]:
-        """获取记忆及元数据"""
-        value = self.get(key)
-        if value is None:
-            return None
+            for msg in recent_messages:
+                self.memory.save_context(
+                    {"input": msg["input"]},
+                    {"output": msg["output"]}
+                )
+        except Exception as e:
+            warning(f"修剪记忆失败: {e}")
 
-        # 从缓冲区查找元数据
-        for item in self.buffer:
-            if item["key"] == key:
-                return {
-                    "value": value,
-                    "metadata": item["metadata"],
-                    "timestamp": item["timestamp"]
-                }
+    def get_recent(self, n: int = None) -> List[Dict]:
+        """获取最近的N条记忆"""
+        if n is None:
+            n = self.max_size
 
-        return {"value": value, "metadata": {}, "timestamp": None}
-
-    def get_recent(self, n: int = 3) -> List[Dict]:
-        """获取最近N条记忆"""
-        self._clean_expired()
-        recent = list(self.buffer)[-n:]
+        # 从手动缓冲区获取（更可靠）
+        recent = list(self._message_buffer)[-n:]
         return [
             {
-                "key": item["key"],
-                "value": item["value"],
-                "metadata": item["metadata"],
-                "timestamp": item["timestamp"]
+                "role": "user",
+                "content": msg["input"],
+                "output": msg["output"],
+                "metadata": msg.get("metadata", {}),
+                "timestamp": msg.get("timestamp")
             }
-            for item in recent
+            for msg in recent
         ]
 
-    def get_all(self) -> Dict[str, Any]:
-        """获取所有当前记忆"""
-        self._clean_expired()
-        return dict(self.current_context)
+    def get_all_messages(self) -> List[Dict]:
+        """获取所有消息（从LangChain记忆）"""
+        variables = self.memory.load_memory_variables({})
+        messages = variables.get("history", [])
 
-    def delete(self, key: str) -> bool:
-        """删除指定记忆"""
-        if key in self.current_context:
-            del self.current_context[key]
-            del self._timestamps[key]
+        result = []
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                result.append({"role": "user", "content": msg.content})
+            elif isinstance(msg, AIMessage):
+                result.append({"role": "assistant", "content": msg.content})
 
-            # 从缓冲区移除
-            self.buffer = deque(
-                [item for item in self.buffer if item["key"] != key],
-                maxlen=self.max_size
-            )
-            return True
-        return False
+        return result
 
-    def clear(self) -> None:
-        """清空所有记忆"""
-        self.buffer.clear()
-        self.current_context.clear()
-        self._timestamps.clear()
+    def clear(self):
+        """清空记忆"""
+        if hasattr(self.memory, 'clear'):
+            self.memory.clear()
+        elif hasattr(self.memory, 'chat_memory') and hasattr(self.memory.chat_memory, 'clear'):
+            self.memory.chat_memory.clear()
 
-    def _clean_expired(self) -> None:
-        """清理过期的记忆"""
-        now = time.time()
-        expired_keys = [
-            key for key, ts in self._timestamps.items()
-            if now - ts > self.ttl_seconds
-        ]
-
-        for key in expired_keys:
-            if key in self.current_context:
-                del self.current_context[key]
-            del self._timestamps[key]
-
-            # 从缓冲区移除
-            self.buffer = deque(
-                [item for item in self.buffer if item["key"] != key],
-                maxlen=self.max_size
-            )
-
-    def size(self) -> int:
-        """获取当前记忆数量"""
-        self._clean_expired()
-        return len(self.current_context)
+        self._message_buffer.clear()
 
     def get_stats(self) -> Dict[str, Any]:
         """获取统计信息"""
-        self._clean_expired()
         return {
-            "current_size": len(self.current_context),
-            "buffer_size": len(self.buffer),
+            "type": "short_term",
+            "message_count": len(self._message_buffer),
             "max_size": self.max_size,
-            "ttl_seconds": self.ttl_seconds,
-            "keys": list(self.current_context.keys())
+            "ttl": self.config.short_term_ttl,
+            "redis_enabled": self.config.short_term_redis_url is not None
         }

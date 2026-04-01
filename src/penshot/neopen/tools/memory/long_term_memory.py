@@ -5,259 +5,165 @@
 @Github: https://github.com/neopen/video-shot-agent
 @Time: 2026/3/30 13:09
 """
-import hashlib
 from datetime import datetime
-from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Optional, Any, Dict, List
 
-from langchain_community.embeddings import OpenAIEmbeddings
+from langchain.memory import (
+    VectorStoreRetrieverMemory
+)
 from langchain_community.vectorstores import Chroma
-from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 
-from penshot.logger import info, error, warning, debug
+from penshot.logger import error, debug
+from penshot.neopen.tools.memory.memory_models import MemoryConfig
 
 
 class LongTermMemory:
-    """长期记忆 - 基于向量数据库，支持持久化和元数据过滤"""
+    """长期记忆 - 基于向量检索的记忆"""
 
-    def __init__(self, embeddings: Embeddings, collection_name: str = "penshot_memory",
-                 persist_directory: Optional[str] = "data/output/memory"):
-        """
-        初始化长期记忆
+    def __init__(self, config: MemoryConfig, script_id: str):
+        self.config = config
+        self.script_id = script_id
 
-        Args:
-            embeddings: 嵌入模型
-            collection_name: 集合名称
-            persist_directory: 持久化目录
-        """
-        # 确保日志目录存在
-        self.embeddings = embeddings or OpenAIEmbeddings()
-        self.collection_name = collection_name
-        self.persist_directory = Path(persist_directory)
-        self.persist_directory.mkdir(parents=True, exist_ok=True)
+        # 向量存储路径
+        self.store_path = f"{config.long_term_store_path}/{script_id}"
 
-        debug(f"初始化长期记忆: collection={collection_name}, persist={persist_directory}")
+        # 初始化向量存储
+        self.vectorstore = Chroma(
+            collection_name=f"script_{script_id}_memory",
+            embedding_function=config.embeddings,
+            persist_directory=self.store_path
+        )
 
-        try:
-            self.vectorstore = Chroma(
-                collection_name=collection_name,
-                embedding_function=self.embeddings,
-                persist_directory=persist_directory
-            )
-            debug("Chroma 向量存储初始化成功")
-        except Exception as e:
-            error(f"Chroma 向量存储初始化失败: {e}")
-            raise
+        # 创建检索器
+        self.retriever = self.vectorstore.as_retriever(
+            search_kwargs={
+                "k": config.long_term_k,
+                "score_threshold": config.long_term_score_threshold
+            }
+        )
 
-        # 记忆统计
-        self._stats = {
-            "total_stored": 0,
-            "last_cleanup": None
-        }
+        # 创建向量检索记忆
+        self.memory = VectorStoreRetrieverMemory(
+            retriever=self.retriever,
+            memory_key="relevant_memories",
+            input_key="input"
+        )
 
-    def store(self, text: str, metadata: Dict[str, Any]) -> str:
-        """存储长期记忆，返回记忆ID"""
-        # 生成唯一ID
-        memory_id = hashlib.md5(
-            f"{text}{datetime.now().isoformat()}".encode()
-        ).hexdigest()[:16]
+        debug(f"初始化长期记忆: script={script_id}, k={config.long_term_k}, threshold={config.long_term_score_threshold}")
 
-        # 添加时间戳
-        metadata.update({
-            "memory_id": memory_id,
-            "stored_at": datetime.now().isoformat(),
-            "text_length": len(text)
-        })
+    def add(self, text: str, metadata: Optional[Dict] = None):
+        """添加记忆"""
+        # 增强文本（加入元数据信息）
+        enhanced_text = text
+        if metadata:
+            enhanced_text = f"{text}\n"
+            if metadata.get("tags"):
+                enhanced_text += f"标签: {', '.join(metadata['tags'])}\n"
+            if metadata.get("category"):
+                enhanced_text += f"类别: {metadata['category']}\n"
 
-        debug(f"存储记忆: id={memory_id}, text_length={len(text)}, metadata={metadata}")
+        # 添加到向量存储
+        self.vectorstore.add_texts(
+            texts=[enhanced_text],
+            metadatas=[{
+                "script_id": self.script_id,
+                "timestamp": datetime.now().isoformat(),
+                **(metadata or {})
+            }]
+        )
 
-        try:
-            self.vectorstore.add_texts(
-                texts=[text],
-                metadatas=[metadata],
-                ids=[memory_id]
-            )
-            self._stats["total_stored"] += 1
-            debug(f"记忆存储成功: {memory_id}, 总数={self._stats['total_stored']}")
-        except Exception as e:
-            error(f"记忆存储失败: {memory_id}, 错误: {e}")
-            raise
+        # 自动持久化
+        if hasattr(self.vectorstore, 'persist'):
+            self.vectorstore.persist()
 
-        return memory_id
-
-    def store_batch(self, texts: List[str], metadatas: List[Dict[str, Any]]) -> List[str]:
-        """批量存储记忆"""
-        debug(f"批量存储记忆: count={len(texts)}")
-        memory_ids = []
-        for i, (text, metadata) in enumerate(zip(texts, metadatas)):
-            try:
-                memory_id = self.store(text, metadata)
-                memory_ids.append(memory_id)
-            except Exception as e:
-                error(f"批量存储第{i}条记忆失败: {e}")
-        debug(f"批量存储完成: 成功={len(memory_ids)}/{len(texts)}")
-        return memory_ids
-
-    def retrieve(self, query: str, k: int = 3, score_threshold: float = 0.0) -> List[Dict]:
-        """
-        检索相关记忆
-
-        Args:
-            query: 查询字符串
-            k: 返回结果数量
-            score_threshold: 相似度阈值（分数越低越相似）
-
-        Returns:
-            记忆列表
-        """
-        debug(f"检索记忆: query='{query[:50]}...', k={k}, threshold={score_threshold}")
+    def search(self, query: str, k: int = None, filter_dict: Optional[Dict] = None) -> List[Dict]:
+        """搜索相关记忆"""
+        if k is None:
+            k = self.config.long_term_k
 
         try:
-            # 方法1：直接调用 similarity_search_with_score
-            results = self.vectorstore.similarity_search_with_score(
-                query, k=k
-            )
-            debug(f"检索到 {len(results)} 条结果")
+            if filter_dict:
+                results = self.vectorstore.similarity_search_with_score(
+                    query, k=k, filter=filter_dict
+                )
+            else:
+                results = self.vectorstore.similarity_search_with_score(query, k=k)
 
-            # 记录每条结果的分数
-            for doc, score in results:
-                debug(f"  结果: score={score:.4f}, content={doc.page_content[:50]}...")
-
-            filtered_results = [
+            return [
                 {
                     "content": doc.page_content,
                     "score": score,
-                    "metadata": doc.metadata,
-                    "memory_id": doc.metadata.get("memory_id")
+                    "metadata": doc.metadata
                 }
                 for doc, score in results
-                if score <= score_threshold  # 注意：分数越小越相似
+                if score >= self.config.long_term_score_threshold
             ]
-
-            if score_threshold > 0:
-                debug(f"过滤后剩余 {len(filtered_results)} 条结果 (阈值={score_threshold})")
-
-            return filtered_results
-
-        except TypeError as e:
-            # 如果版本不支持 k 参数
-            if "unexpected keyword argument" in str(e) and "k" in str(e):
-                warning(f"Chroma 版本可能不支持 k 参数，尝试不带 k 调用: {e}")
-                try:
-                    results = self.vectorstore.similarity_search_with_score(query)
-                    # 手动限制 k
-                    results = results[:k]
-                    debug(f"手动截取前 {k} 条结果")
-                    return [
-                        {
-                            "content": doc.page_content,
-                            "score": score,
-                            "metadata": doc.metadata,
-                            "memory_id": doc.metadata.get("memory_id")
-                        }
-                        for doc, score in results
-                        if score <= score_threshold
-                    ]
-                except Exception as e2:
-                    error(f"备用检索方法失败: {e2}")
-                    return []
-            else:
-                error(f"检索记忆时发生 TypeError: {e}")
-                return []
-
         except Exception as e:
-            error(f"检索记忆失败: {e}")
+            error(f"长期记忆搜索失败: {e}")
             return []
 
-    def retrieve_by_filter(self, query: str, filter_dict: Dict[str, Any], k: int = 3) -> List[Document]:
-        """按条件过滤检索"""
-        debug(f"按条件检索: query='{query[:50]}...', filter={filter_dict}, k={k}")
-        try:
-            results = self.vectorstore.similarity_search(
-                query, k=k, filter=filter_dict
-            )
-            debug(f"检索到 {len(results)} 条结果")
-            return results
-        except Exception as e:
-            error(f"按条件检索失败: {e}")
-            return []
-
-    def retrieve_by_type(self, memory_type: str, query: str, k: int = 3) -> List[Document]:
-        """按类型检索记忆"""
-        debug(f"按类型检索: type={memory_type}, query='{query[:50]}...'")
-        return self.retrieve_by_filter(query, {"type": memory_type}, k)
-
-    def get_by_id(self, memory_id: str) -> Optional[Document]:
+    def get_by_id(self, memory_id: str) -> Optional[Dict]:
         """根据ID获取记忆"""
-        debug(f"根据ID获取记忆: {memory_id}")
         try:
-            # 尝试通过 metadata 过滤
-            results = self.vectorstore.get(where={"memory_id": memory_id})
-            ids = results.get("ids", [])
-            if ids:
-                debug(f"找到记忆: {ids}")
-                # 获取文档内容
-                docs = self.vectorstore.get_by_ids(ids)
-                if docs:
-                    return docs[0]
-            else:
-                debug(f"未找到记忆: {memory_id}")
+            results = self.vectorstore.get(ids=[memory_id])
+            if results and results.get("documents"):
+                return {
+                    "content": results["documents"][0],
+                    "metadata": results["metadatas"][0] if results.get("metadatas") else {}
+                }
         except Exception as e:
-            error(f"根据ID获取记忆失败: {memory_id}, 错误: {e}")
+            error(f"获取记忆失败: {e}")
         return None
 
-    def delete_by_filter(self, filter_dict: Dict[str, Any]) -> int:
+    def delete_by_filter(self, filter_dict: Dict) -> int:
         """按条件删除记忆"""
-        debug(f"按条件删除记忆: filter={filter_dict}")
         try:
-            # 获取所有匹配的文档
+            # 获取所有匹配的ID
             results = self.vectorstore.get(where=filter_dict)
             ids = results.get("ids", [])
             if ids:
                 self.vectorstore.delete(ids)
-                self._stats["total_stored"] -= len(ids)
-                debug(f"删除记忆成功: {len(ids)} 条")
+                if hasattr(self.vectorstore, 'persist'):
+                    self.vectorstore.persist()
                 return len(ids)
-            else:
-                debug("没有匹配的记忆需要删除")
         except Exception as e:
-            error(f"按条件删除记忆失败: {e}")
+            error(f"删除记忆失败: {e}")
         return 0
 
-    def delete_old_memories(self, days: int = 30) -> int:
-        """删除超过指定天数的记忆"""
-        debug(f"删除超过 {days} 天的旧记忆")
-        # 简化实现：需要根据 metadata 中的时间过滤
-        warning("delete_old_memories 功能尚未完整实现")
-        return 0
-
-    def clear_all(self) -> None:
+    def clear(self):
         """清空所有记忆"""
-        info(f"清空所有记忆: collection={self.collection_name}")
         try:
+            # 删除集合
             self.vectorstore.delete_collection()
+            # 重新创建
             self.vectorstore = Chroma(
-                collection_name=self.collection_name,
-                embedding_function=self.embeddings,
-                persist_directory=self.persist_directory.name
+                collection_name=f"script_{self.script_id}_memory",
+                embedding_function=self.config.embeddings,
+                persist_directory=self.store_path
             )
-            self._stats["total_stored"] = 0
-            info("记忆清空成功")
+            self.retriever = self.vectorstore.as_retriever(
+                search_kwargs={
+                    "k": self.config.long_term_k,
+                    "score_threshold": self.config.long_term_score_threshold
+                }
+            )
+            self.memory = VectorStoreRetrieverMemory(
+                retriever=self.retriever,
+                memory_key="relevant_memories",
+                input_key="input"
+            )
         except Exception as e:
-            error(f"清空记忆失败: {e}")
+            error(f"清空长期记忆失败: {e}")
 
     def get_stats(self) -> Dict[str, Any]:
         """获取统计信息"""
-        stats = {
-            "total_stored": self._stats["total_stored"],
-            "collection_name": self.collection_name,
-            "persist_directory": self.persist_directory
-        }
-        debug(f"记忆统计: {stats}")
-        return stats
-
-    def similarity_search(self, query: str, k: int = 3) -> List[Dict]:
-        """简化的相似度搜索（兼容旧接口）"""
-        debug(f"相似度搜索（兼容接口）: query='{query[:50]}...', k={k}")
-        return self.retrieve(query, k=k)
+        try:
+            count = self.vectorstore._collection.count() if self.vectorstore._collection else 0
+            return {
+                "type": "long_term",
+                "document_count": count,
+                "k": self.config.long_term_k,
+                "store_path": self.store_path
+            }
+        except:
+            return {"type": "long_term", "document_count": 0}

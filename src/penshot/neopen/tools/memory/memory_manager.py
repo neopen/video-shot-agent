@@ -1,398 +1,356 @@
 """
 @FileName: memory_manager.py
-@Description: 统一记忆管理器 - 支持任务级隔离
+@Description: 基于LangChain的记忆管理系统
 @Author: HiPeng
 @Github: https://github.com/neopen/video-shot-agent
-@Time: 2026/3/30 13:10
+@Time: 2026/4/1
 """
-import time
-from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum
+import json
 from typing import Optional, Any, Dict, List
 
-from penshot.logger import error, info
-from penshot.neopen.tools.memory.long_term_memory import LongTermMemory
-from penshot.neopen.tools.memory.task_memory import TaskMemory
+from langchain.llms.base import BaseLLM
 
-
-class MemoryType(str, Enum):
-    """记忆类型枚举"""
-    SHORT = "short"
-    MEDIUM = "medium"
-    LONG = "long"
-    AUTO = "auto"  # 自动选择
-
-
-@dataclass
-class MemoryEntry:
-    """记忆条目"""
-    key: str
-    value: Any
-    memory_type: MemoryType
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-    access_count: int = 0
-    last_access: float = field(default_factory=time.time)
+from penshot.logger import info, debug
+from penshot.neopen.tools.memory.memory_context import MemoryContext
+from penshot.neopen.tools.memory.memory_models import MemoryConfig, MemoryLevel
+from penshot.neopen.tools.memory.script_memory import ScriptMemory
 
 
 class MemoryManager:
-    """统一记忆管理器 - 支持任务级隔离"""
+    """全局记忆管理器 - 统一记忆检索接口"""
 
-    # 全局长期记忆（按任务ID隔离）
-    _global_long_term: Dict[str, LongTermMemory] = {}
-    _long_term_lock = None
-
-    def __init__(
-            self,
-            llm,
-            embeddings,
-            enable_long_term: bool = False,
-            short_term_size: int = 20,
-            short_term_ttl: int = 3600,
-            medium_term_max: int = 50,
-            long_term_collection: str = "penshot_memory"
-    ):
+    def __init__(self, script_id, llm: BaseLLM, config: Optional[MemoryConfig] = None):
         """
         初始化记忆管理器
 
         Args:
-            llm: 语言模型实例
-            embeddings: 嵌入模型
-            enable_long_term: 是否启用长期记忆
-            short_term_size: 短期记忆容量
-            short_term_ttl: 短期记忆TTL（秒）
-            medium_term_max: 中期记忆最大阶段数
-            long_term_collection: 长期记忆集合名
+            script_id: 脚本ID
+            llm: 语言模型
+            config: 记忆配置
         """
         self.llm = llm
-        self.embeddings = embeddings
-        self.enable_long_term = enable_long_term
-        self.long_term_collection = long_term_collection
+        self.config = config or MemoryConfig()
 
-        # 任务级记忆存储
-        self._task_memories: Dict[str, TaskMemory] = {}
+        # 任务记忆字典
+        self._script_memories: Dict[str, ScriptMemory] = {}
 
-        # 全局长期记忆工厂
-        self._long_term_memories: Dict[str, LongTermMemory] = {}
+        # 当前任务ID
+        self._current_script_id: Optional[str] = script_id
 
-        # 配置参数
-        self.short_term_size = short_term_size
-        self.short_term_ttl = short_term_ttl
-        self.medium_term_max = medium_term_max
+        self.set_script(script_id)
 
-    def _get_or_create_task_memory(self, task_id: str) -> TaskMemory:
-        """获取或创建任务记忆"""
-        if task_id not in self._task_memories:
-            self._task_memories[task_id] = TaskMemory(
-                task_id=task_id,
-                short_term_size=self.short_term_size,
-                short_term_ttl=self.short_term_ttl,
-                medium_term_max=self.medium_term_max,
-                llm=self.llm,
-                embeddings=self.embeddings
-            )
-        return self._task_memories[task_id]
+        info("初始化记忆管理器")
 
-    def _get_long_term_memory(self, task_id: str) -> Optional[LongTermMemory]:
-        """获取长期记忆（按任务隔离）"""
-        if not self.enable_long_term:
-            return None
+    def set_script(self, script_id: str):
+        """设置当前任务"""
+        self._current_script_id = script_id
+        if script_id not in self._script_memories:
+            self._script_memories[script_id] = ScriptMemory(script_id, self.llm, self.config)
+        debug(f"切换到任务: {script_id}")
 
-        if task_id not in self._long_term_memories:
-            # 为每个任务创建独立的长期记忆集合
-            collection_name = f"{self.long_term_collection}_{task_id}"
-            self._long_term_memories[task_id] = LongTermMemory(
-                embeddings=self.embeddings,
-                collection_name=collection_name,
-                persist_directory=f"data/output/memory/{task_id}"
-            )
-        return self._long_term_memories[task_id]
+    def get_script(self, script_id: Optional[str] = None) -> ScriptMemory:
+        """获取任务记忆实例"""
+        tid = script_id or self._current_script_id
+        if not tid:
+            raise ValueError("未设置任务ID，请先调用 set_script()")
 
-    def set_task_id(self, task_id: str) -> None:
+        if tid not in self._script_memories:
+            self._script_memories[tid] = ScriptMemory(tid, self.llm, self.config)
+
+        return self._script_memories[tid]
+
+    # ===================== 添加记忆 =====================
+
+    def add(self, input_text: str, output_text: Any, level: MemoryLevel = MemoryLevel.SHORT_TERM,
+            metadata: Optional[Dict] = None, script_id: Optional[str] = None):
+        """添加交互记忆，支持任意类型"""
+        output_str = self._to_str(output_text)
+        script = self.get_script(script_id)
+        script.add(input_text, output_str, level, metadata)
+        debug(f"添加记忆: script={script.script_id}, level={level.value}")
+
+    def add_raw(self, input_text: str, output_text: str, level: MemoryLevel = MemoryLevel.SHORT_TERM,
+                metadata: Optional[Dict] = None, script_id: Optional[str] = None):
+        """直接添加字符串（不自动转换）"""
+        script = self.get_script(script_id)
+        script.add(input_text, output_text, level, metadata)
+        debug(f"添加原始记忆: script={script.script_id}, level={level.value}")
+
+    def add_stage(self, stage_name: str, content: str, metadata: Optional[Dict] = None,
+                  script_id: Optional[str] = None):
+        """添加阶段记忆"""
+        script = self.get_script(script_id)
+        script.add_stage(stage_name, content, metadata)
+        debug(f"添加阶段记忆: script={script.script_id}, stage={stage_name}")
+
+    # ===================== 核心检索接口 =====================
+
+    def recall(self, query: str, level: Optional[MemoryLevel] = None,
+               k: int = 3, script_id: Optional[str] = None) -> MemoryContext:
         """
-        设置当前任务ID（用于工作流节点）
+        回忆记忆，返回 MemoryContext 对象
 
         Args:
-            task_id: 任务ID
-        """
-        self._current_task_id = task_id
+            query: 查询文本
+            level: 记忆级别（None表示所有级别）
+            k: 返回数量
+            script_id: 任务ID（可选）
 
-    def remember(
-            self,
-            key: str,
-            value: Any,
-            memory_type: MemoryType = MemoryType.SHORT,
-            metadata: Optional[Dict] = None,
-            tags: Optional[List[str]] = None,
-            task_id: Optional[str] = None
-    ) -> None:
+        Returns:
+            MemoryContext: 包含短期、中期、长期记忆的上下文对象
         """
-        存储记忆
+        script = self.get_script(script_id)
+        context = script.recall(query, level, k)
+
+        # 反序列化短期记忆
+        for item in context.short_term:
+            if "output" in item:
+                item["output"] = self._deserialize(
+                    item["output"],
+                    item.get("metadata", {})
+                )
+
+        # 反序列化长期记忆
+        for item in context.long_term:
+            if "content" in item:
+                item["content"] = self._deserialize(
+                    item["content"],
+                    item.get("metadata", {})
+                )
+
+        debug(f"回忆记忆: script={script.script_id}, level={level}, "
+              f"short={len(context.short_term)}, medium={'有' if context.medium_term else '无'}, "
+              f"long={len(context.long_term)}")
+        return context
+
+    # ===================== 便捷检索接口 =====================
+
+    def get(self, key: str, level: MemoryLevel = MemoryLevel.SHORT_TERM,
+            default: Any = None, script_id: Optional[str] = None) -> Any:
+        """
+        获取单个记忆值（最常用）
 
         Args:
             key: 记忆键
-            value: 记忆值
-            memory_type: 记忆类型
-            metadata: 元数据
-            tags: 标签
-            task_id: 任务ID（可选，默认使用当前任务）
+            level: 记忆级别
+            default: 默认值
+            script_id: 任务ID
+
+        Returns:
+            记忆值（已反序列化）
         """
-        # 获取任务ID
-        tid = task_id or getattr(self, '_current_task_id', None)
-        if not tid:
-            error(f"未设置任务ID，无法存储记忆: {key}")
-            return
+        context = self.recall(key, level=level, script_id=script_id)
 
-        metadata = metadata or {}
-        if tags:
-            metadata["tags"] = tags
-
-        task_memory = self._get_or_create_task_memory(tid)
-
-        if memory_type == MemoryType.LONG:
-            # 长期记忆
-            long_term = self._get_long_term_memory(tid)
-            if long_term:
-                long_term.store(str(value), {"key": key, **metadata})
-        elif memory_type == MemoryType.MEDIUM:
-            # 中期记忆
-            task_memory.remember(key, value, memory_type, metadata)
-        else:
-            # 短期记忆
-            task_memory.remember(key, value, MemoryType.SHORT, metadata)
-
-
-    def recall(
-            self,
-            key: str,
-            memory_type: Optional[MemoryType] = None,
-            default: Any = None,
-            task_id: Optional[str] = None
-    ) -> Optional[Any]:
-        """
-        回忆记忆
-
-        Args:
-            key: 记忆键
-            memory_type: 指定记忆类型，None时自动降级查找
-            default: 默认返回值
-            task_id: 任务ID（可选，默认使用当前任务）
-        """
-        # 获取任务ID
-        tid = task_id or getattr(self, '_current_task_id', None)
-        if not tid:
-            # 如果没有设置任务ID，返回默认值，不报错
-            info(f"未设置任务ID，无法回忆记忆: {key}")
+        if level == MemoryLevel.SHORT_TERM:
+            if context.short_term:
+                return context.short_term[-1].get("output", default)
             return default
-
-        task_memory = self._get_or_create_task_memory(tid)
-
-        try:
-            # 指定类型查找
-            if memory_type:
-                if memory_type == MemoryType.LONG:
-                    long_term = self._get_long_term_memory(tid)
-                    if long_term:
-                        results = long_term.retrieve(key, k=1)
-                        if results:
-                            return results[0]["content"]
-                    return default
-                else:
-                    return task_memory.recall(key, memory_type, default)
-
-            # 自动降级查找
-            # 1. 短期记忆
-            value = task_memory.recall(key, MemoryType.SHORT)
-            if value is not None:
-                return value
-
-            # 2. 中期记忆
-            value = task_memory.recall(key, MemoryType.MEDIUM)
-            if value is not None:
-                return value
-
-            # 3. 长期记忆
-            long_term = self._get_long_term_memory(tid)
-            if long_term:
-                results = long_term.retrieve(key, k=1)
-                if results:
-                    return results[0]["content"]
-
-        except Exception as e:
-            error(f"记忆检索异常: {e}")
-
+        elif level == MemoryLevel.MEDIUM_TERM:
+            return context.medium_term if context.medium_term else default
+        elif level == MemoryLevel.LONG_TERM:
+            if context.long_term:
+                return context.long_term[-1].get("content", default)
+            return default
         return default
 
-
-    def get_context(self, query: str, max_tokens: int = 2000, task_id: Optional[str] = None) -> str:
-        """获取融合上下文（按任务隔离）"""
-        tid = task_id or getattr(self, '_current_task_id', None)
-        if not tid:
-            return ""
-
-        task_memory = self._get_or_create_task_memory(tid)
-        contexts = []
-        current_tokens = 0
-
-        # 短期上下文（最高优先级）
-        recent = task_memory.short_term.get_recent(5)
-        for item in recent:
-            ctx = f"[当前] {item['key']}: {str(item['value'])[:200]}"
-            contexts.append(ctx)
-            current_tokens += len(ctx) // 2
-
-        # 中期上下文
-        if task_memory.medium_term:
-            stages = task_memory.medium_term.get_recent_stages(3)
-            for stage in stages:
-                ctx = f"[阶段] {stage['stage_name']}: {stage['summary'][:200]}"
-                if current_tokens + len(ctx) // 2 <= max_tokens:
-                    contexts.append(ctx)
-                    current_tokens += len(ctx) // 2
-
-        # 长期上下文（相关性检索）
-        if self.enable_long_term and current_tokens < max_tokens:
-            long_term = self._get_long_term_memory(tid)
-            if long_term:
-                long_results = long_term.retrieve(query, k=2)
-                for r in long_results:
-                    ctx = f"[历史] {r['content'][:200]}"
-                    if current_tokens + len(ctx) // 2 <= max_tokens:
-                        contexts.append(ctx)
-                        current_tokens += len(ctx) // 2
-
-        return "\n".join(contexts)
-
-    def get_stats(self, task_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_list(self, key: str, level: MemoryLevel = MemoryLevel.SHORT_TERM,
+                 script_id: Optional[str] = None) -> List[Any]:
         """
-        获取统计信息
+        获取记忆列表（用于存储多个值的场景）
 
         Args:
-            task_id: 任务ID（可选，默认使用当前任务）
+            key: 记忆键
+            level: 记忆级别
+            script_id: 任务ID
 
         Returns:
-            统计信息字典
+            记忆值列表（已反序列化）
         """
-        tid = task_id or getattr(self, '_current_task_id', None)
-        if not tid:
-            return {
-                "error": "未设置任务ID",
-                "total_tasks": len(self._task_memories),
-                "tasks": list(self._task_memories.keys())
-            }
+        context = self.recall(key, level=level, script_id=script_id)
 
-        if tid in self._task_memories:
-            return self._task_memories[tid].get_stats()
-
-        return {
-            "task_id": tid,
-            "short_term": {"current_size": 0, "buffer_size": 0, "max_size": self.short_term_size},
-            "medium_term": {"stage_count": 0, "max_stages": self.medium_term_max},
-            "long_term": {"enabled": self.enable_long_term, "total_stored": 0},
-            "access_stats": {"total_keys": 0, "most_accessed": []}
-        }
-
-    def get_most_accessed(self, n: int = 5, task_id: Optional[str] = None) -> List[Dict]:
-        """
-        获取最常访问的记忆
-
-        Args:
-            n: 返回数量
-            task_id: 任务ID（可选，默认使用当前任务）
-
-        Returns:
-            最常访问的记忆列表
-        """
-        tid = task_id or getattr(self, '_current_task_id', None)
-        if not tid:
+        if level == MemoryLevel.SHORT_TERM:
+            if context.short_term:
+                return [item.get("output") for item in context.short_term if item.get("output")]
             return []
-
-        if tid not in self._task_memories:
+        elif level == MemoryLevel.LONG_TERM:
+            if context.long_term:
+                return [item.get("content") for item in context.long_term if item.get("content")]
             return []
+        return []
 
-        task_memory = self._task_memories[tid]
-        sorted_entries = sorted(
-            task_memory._access_stats.values(),
-            key=lambda x: x.access_count,
-            reverse=True
-        )[:n]
-
-        return [
-            {
-                "key": e.key,
-                "access_count": e.access_count,
-                "last_access": e.last_access,
-                "memory_type": e.memory_type
-            }
-            for e in sorted_entries
-        ]
-
-    def get_all_task_stats(self) -> Dict[str, Any]:
+    def get_latest(self, key: str, level: MemoryLevel = MemoryLevel.SHORT_TERM,
+                   default: Any = None, script_id: Optional[str] = None) -> Any:
         """
-        获取所有任务的统计信息
-
-        Returns:
-            所有任务的统计信息
+        获取最新一条记忆（别名，同 get）
         """
-        return {
-            "total_tasks": len(self._task_memories),
-            "tasks": [
-                {
-                    "task_id": task_id,
-                    "stats": memory.get_stats()
-                }
-                for task_id, memory in self._task_memories.items()
-            ]
-        }
+        return self.get(key, level, default, script_id)
 
-    def clear_task_memory(self, task_id: str) -> None:
-        """清空指定任务的所有记忆"""
-        if task_id in self._task_memories:
-            self._task_memories[task_id].clear()
-            del self._task_memories[task_id]
-
-        # 清理长期记忆
-        if task_id in self._long_term_memories:
+    def get_latest_deserialized(self, key: str, level: MemoryLevel = MemoryLevel.SHORT_TERM,
+                                default: Any = None, script_id: Optional[str] = None) -> Any:
+        """
+        获取最新一条记忆并自动反序列化 JSON
+        """
+        value = self.get(key, level, default, script_id)
+        if isinstance(value, str):
             try:
-                self._long_term_memories[task_id].clear_all()
-            except Exception as e:
-                error(f"清理长期记忆失败: {e}")
-            finally:
-                del self._long_term_memories[task_id]
+                return json.loads(value)
+            except:
+                return value
+        return value
 
-    def get_task_stats(self, task_id: str) -> Dict[str, Any]:
-        """获取任务记忆统计"""
-        stats = {"task_id": task_id}
+    def get_all(self, key: str, level: MemoryLevel = MemoryLevel.SHORT_TERM,
+                script_id: Optional[str] = None) -> List[Any]:
+        """
+        获取所有匹配的记忆（别名，同 get_list）
+        """
+        return self.get_list(key, level, script_id)
 
-        if task_id in self._task_memories:
-            stats.update(self._task_memories[task_id].get_stats())
+    # ===================== 状态查询接口 =====================
 
-        if task_id in self._long_term_memories:
-            stats["long_term"] = self._long_term_memories[task_id].get_stats()
+    def exists(self, key: str, level: MemoryLevel = MemoryLevel.SHORT_TERM,
+               script_id: Optional[str] = None) -> bool:
+        """
+        检查记忆是否存在
+
+        Args:
+            key: 记忆键
+            level: 记忆级别
+            script_id: 任务ID
+
+        Returns:
+            是否存在
+        """
+        if level == MemoryLevel.SHORT_TERM:
+            context = self.recall(key, level=level, script_id=script_id)
+            return bool(context.short_term)
+        elif level == MemoryLevel.MEDIUM_TERM:
+            context = self.recall(key, level=level, script_id=script_id)
+            return bool(context.medium_term)
+        elif level == MemoryLevel.LONG_TERM:
+            context = self.recall(key, level=level, script_id=script_id)
+            return bool(context.long_term)
+        return False
+
+    def count(self, key: str, level: MemoryLevel = MemoryLevel.SHORT_TERM,
+              script_id: Optional[str] = None) -> int:
+        """
+        获取记忆数量
+
+        Args:
+            key: 记忆键
+            level: 记忆级别
+            script_id: 任务ID
+
+        Returns:
+            记忆数量
+        """
+        if level == MemoryLevel.SHORT_TERM:
+            context = self.recall(key, level=level, script_id=script_id)
+            return len(context.short_term)
+        elif level == MemoryLevel.LONG_TERM:
+            context = self.recall(key, level=level, script_id=script_id)
+            return len(context.long_term)
+        return 0
+
+    # ===================== 语义搜索接口 =====================
+
+    def search(self, query: str, k: int = 3, level: MemoryLevel = MemoryLevel.LONG_TERM,
+               script_id: Optional[str] = None) -> List[Dict]:
+        """
+        语义搜索（仅支持长期记忆）
+
+        Args:
+            query: 查询文本
+            k: 返回数量
+            level: 记忆级别
+            script_id: 任务ID
+
+        Returns:
+            搜索结果列表
+        """
+        script = self.get_script(script_id)
+        results = script.search(query, k, level)
+
+        # 反序列化结果
+        for item in results:
+            if "content" in item:
+                item["content"] = self._deserialize(
+                    item["content"],
+                    item.get("metadata", {})
+                )
+        return results
+
+    def search_latest(self, query: str, k: int = 3, script_id: Optional[str] = None) -> List[Dict]:
+        """
+        搜索最新记忆（别名）
+        """
+        return self.search(query, k, MemoryLevel.LONG_TERM, script_id)
+
+    # ===================== 上下文接口 =====================
+
+    def get_context_for_llm(self, query: str, max_tokens: int = 2000,
+                            script_id: Optional[str] = None) -> str:
+        """
+        获取用于LLM提示的上下文
+
+        Args:
+            query: 查询文本
+            max_tokens: 最大 token 数
+            script_id: 任务ID
+
+        Returns:
+            格式化的上下文字符串
+        """
+        context = self.recall(query, script_id=script_id)
+        return context.to_prompt(max_tokens)
+
+    # ===================== 统计和管理接口 =====================
+
+    def get_stats(self, script_id: Optional[str] = None) -> Dict[str, Any]:
+        """获取统计信息"""
+        if script_id:
+            script = self.get_script(script_id)
+            return script.get_stats()
         else:
-            stats["long_term"] = {"enabled": self.enable_long_term}
+            return {
+                "total_scripts": len(self._script_memories),
+                "scripts": {
+                    tid: memory.get_stats()
+                    for tid, memory in self._script_memories.items()
+                },
+                "current_script": self._current_script_id
+            }
 
-        return stats
+    def clear_script(self, script_id: Optional[str] = None):
+        """清空指定任务的记忆"""
+        tid = script_id or self._current_script_id
+        if tid and tid in self._script_memories:
+            self._script_memories[tid].clear()
+            del self._script_memories[tid]
+            info(f"清空任务记忆: {tid}")
 
-    def get_all_tasks(self) -> List[str]:
-        """获取所有任务ID"""
-        return list(self._task_memories.keys())
+    def clear_all(self):
+        """清空所有任务的记忆"""
+        for script_id in list(self._script_memories.keys()):
+            self.clear_script(script_id)
+        info("清空所有记忆")
 
-    # ========== 兼容旧接口 ==========
+    # ===================== 私有辅助方法 =====================
 
-    def remember_short(self, key: str, value: Any, metadata: Optional[Dict] = None):
-        """存储短期记忆（兼容）"""
-        self.remember(key, value, MemoryType.SHORT, metadata)
+    def _deserialize(self, value: str, metadata: Dict = None) -> Any:
+        """反序列化记忆值"""
+        if metadata and metadata.get("_serialized"):
+            try:
+                return json.loads(value)
+            except:
+                return value
+        return value
 
-    def recall_short(self, key: str, default: Any = None) -> Optional[Any]:
-        """回忆短期记忆（兼容）"""
-        return self.recall(key, MemoryType.SHORT, default)
-
-    def remember_medium(self, key: str, value: Any, metadata: Optional[Dict] = None):
-        """存储中期记忆（兼容）"""
-        self.remember(key, value, MemoryType.MEDIUM, metadata)
-
-    def recall_medium(self, key: str, default: Any = None) -> Optional[Any]:
-        """回忆中期记忆（兼容）"""
-        return self.recall(key, MemoryType.MEDIUM, default)
+    def _to_str(self, value: Any) -> str:
+        """将任意值转换为字符串"""
+        if isinstance(value, str):
+            return value
+        try:
+            return json.dumps(value, ensure_ascii=False, default=str)
+        except:
+            return str(value)
