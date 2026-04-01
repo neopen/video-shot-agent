@@ -7,9 +7,11 @@
 """
 import asyncio
 
+from pydantic import SecretStr
+
 from penshot.api import PenshotFunction
-from penshot.config import ShotConfig
-from penshot import Language
+from penshot import ShotConfig, ShotLanguage
+from penshot.config import EmbeddingBaseConfig, LLMBaseConfig
 
 
 class ConfigFactory:
@@ -19,32 +21,57 @@ class ConfigFactory:
     def create_fast_config() -> ShotConfig:
         """快速但简略的配置"""
         return ShotConfig(
-            model_name="gpt-3.5-turbo",
-            temperature=0.9,
-            max_tokens=1000,
-            timeout=15,
-        )
+        llm=LLMBaseConfig(
+            base_url="https://api.deepseek.com",
+            model_name="gpt-4",
+            api_key=SecretStr("xxxxxxxxxxxx"),
+        ),
+        embed=EmbeddingBaseConfig(
+            base_url="http://localhost:11434",
+            model_name="text-embedding-3-small",
+            api_key=SecretStr("xxxxxxxxxxx"),
+        ),
+    )
 
     @staticmethod
     def create_quality_config() -> ShotConfig:
         """高质量详细配置"""
         return ShotConfig(
-            model_name="gpt-4",
-            temperature=0.4,
-            max_tokens=5000,
-            top_p=0.95,
-            timeout=60,
+            llm=LLMBaseConfig(
+                base_url="https://api.deepseek.com",
+                model_name="gpt-4",
+                api_key=SecretStr("xxxxxxxxxxxx"),
+                temperature=0.3,
+                timeout=60,
+                max_tokens=3000
+            ),
+            embed=EmbeddingBaseConfig(
+                base_url="http://localhost:11434",
+                model_name="text-embedding-3-small",
+                api_key=SecretStr("xxxxxxxxxxx"),
+                timeout=60,
+            ),
+            max_fragment_duration=10,
+            video_model="sora-2-2025-12-08",
         )
 
     @staticmethod
     def create_local_config(base_url: str = "http://localhost:11434/v1") -> ShotConfig:
         """本地模型配置"""
         return ShotConfig(
-            model_name="qwen2.5:14b",
-            base_url=base_url,
-            temperature=0.7,
-            max_tokens=3000,
-            timeout=120,
+            llm=LLMBaseConfig(
+                base_url="http://localhost:11434",
+                model_name="qwen-plus",
+                temperature=0.3,
+                timeout=60,
+                max_tokens=5000
+            ),
+            embed=EmbeddingBaseConfig(
+                base_url="http://localhost:11434",
+                model_name="text-embedding-3-small",
+                timeout=60,
+            ),
+            max_fragment_duration=10,
         )
 
     @staticmethod
@@ -52,11 +79,19 @@ class ConfigFactory:
         """DeepSeek 配置"""
         from pydantic import SecretStr
         return ShotConfig(
-            model_name="deepseek-chat",
-            base_url="https://api.deepseek.com/v1",
-            api_key=SecretStr(api_key),
-            temperature=0.6,
-            max_tokens=4000,
+            llm=LLMBaseConfig(
+                base_url="https://api.deepseek.com/v1",
+                model_name="deepseek-chat",
+                api_key=SecretStr(api_key),
+                temperature=0.5,
+                timeout=60,
+                max_tokens=5000
+            ),
+            embed=EmbeddingBaseConfig(
+                base_url="http://localhost:11434",
+                model_name="text-embedding-3-small",
+                timeout=60,
+            ),
         )
 
 
@@ -64,17 +99,13 @@ async def basic_config_demo():
     """基础配置示例"""
     print("=== 基础配置示例 ===")
 
-    config = ShotConfig(
-        model_name="gpt-4",
-        temperature=0.7,
-        max_tokens=2000
-    )
+    config = ConfigFactory.create_fast_config()
 
-    agent = PenshotFunction(config=config, language=Language.ZH, max_concurrent=5)
+    agent = PenshotFunction(config=config, language=ShotLanguage.ZH, max_concurrent=5)
 
     result = agent.breakdown_script("一个简单的测试场景")
 
-    print(f"配置: model={config.model_name}, temperature={config.temperature}")
+    print(f"配置: model={config.llm.model_name}, temperature={config.llm.temperature}")
     print(f"结果: 成功={result.success}")
 
     return result
@@ -86,11 +117,11 @@ async def local_model_demo():
 
     try:
         config = ConfigFactory.create_local_config()
-        agent = PenshotFunction(config=config, language=Language.ZH, max_concurrent=5)
+        agent = PenshotFunction(config=config, language=ShotLanguage.ZH, max_concurrent=5)
 
         result = agent.breakdown_script("本地模型测试场景")
 
-        print(f"本地模型配置: {config.model_name}")
+        print(f"本地模型配置: {config.llm.model_name}")
         print(f"结果: 成功={result.success}")
 
         return result
@@ -105,7 +136,7 @@ async def quality_config_demo():
     print("\n=== 高质量配置示例 ===")
 
     config = ConfigFactory.create_quality_config()
-    agent = PenshotFunction(config=config, language=Language.ZH, max_concurrent=5)
+    agent = PenshotFunction(config=config, language=ShotLanguage.ZH, max_concurrent=5)
 
     detailed_script = """
     电影《追光者》开场：
@@ -151,7 +182,7 @@ async def fallback_config_demo():
     primary_config = ConfigFactory.create_quality_config()
     fallback_config = ConfigFactory.create_fast_config()
 
-    agent = PenshotFunction(config=primary_config, language=Language.ZH, max_concurrent=5)
+    agent = PenshotFunction(config=primary_config, language=ShotLanguage.ZH, max_concurrent=5)
 
     try:
         result = agent.breakdown_script("测试剧本")
@@ -162,7 +193,7 @@ async def fallback_config_demo():
             print(f"主配置失败: {result.error}")
             print("切换到降级配置...")
 
-            agent_fallback = PenshotFunction(config=fallback_config, language=Language.ZH, max_concurrent=5)
+            agent_fallback = PenshotFunction(config=fallback_config, language=ShotLanguage.ZH, max_concurrent=5)
             result = agent_fallback.breakdown_script("测试剧本")
             print(f"降级配置结果: 成功={result.success}")
 
@@ -188,7 +219,7 @@ async def multi_config_demo():
     results = {}
     for name, config in configs.items():
         try:
-            agent = PenshotFunction(config=config, language=Language.ZH, max_concurrent=5)
+            agent = PenshotFunction(config=config, language=ShotLanguage.ZH, max_concurrent=5)
             result = agent.breakdown_script(test_script)
 
             if result.success:
@@ -222,7 +253,7 @@ async def queue_control_demo():
     print("\n=== 队列控制示例 ===")
 
     # 创建低并发数的智能体
-    agent = PenshotFunction(language=Language.ZH, max_concurrent=2)
+    agent = PenshotFunction(language=ShotLanguage.ZH, max_concurrent=2)
 
     # 查看初始队列状态
     queue_status = agent.get_queue_status()

@@ -9,9 +9,9 @@ import asyncio
 
 from pydantic import SecretStr
 
+from penshot import ShotLanguage, ShotConfig
 from penshot.api import PenshotFunction
-from penshot.config import EmbeddingBaseConfig, LLMBaseConfig, ShotConfig
-from penshot.neopen.shot_language import Language
+from penshot.config import EmbeddingBaseConfig, LLMBaseConfig
 
 
 async def basic_usage():
@@ -19,7 +19,7 @@ async def basic_usage():
     print("=== 基础用法示例 ===")
 
     # 创建智能体实例（可配置并发数）
-    agent = PenshotFunction(language=Language.ZH, max_concurrent=5)
+    agent = PenshotFunction(language=ShotLanguage.ZH, max_concurrent=5)
 
     script = """
     场景：现代办公室
@@ -55,7 +55,7 @@ async def async_usage():
     """异步用法示例"""
     print("\n=== 异步用法示例 ===")
 
-    agent = PenshotFunction(language=Language.ZH, max_concurrent=5)
+    agent = PenshotFunction(language=ShotLanguage.ZH, max_concurrent=5)
 
     script = """
     早晨，一个女孩在咖啡馆读书，阳光透过窗户...
@@ -86,7 +86,7 @@ async def batch_processing():
     """批量处理示例"""
     print("\n=== 批量处理示例 ===")
 
-    agent = PenshotFunction(language=Language.ZH, max_concurrent=5)
+    agent = PenshotFunction(language=ShotLanguage.ZH, max_concurrent=5)
 
     scripts = [
         "一个男人在海边跑步，日出时分...",
@@ -112,7 +112,7 @@ async def async_batch_processing():
     """异步批量处理示例"""
     print("\n=== 异步批量处理示例 ===")
 
-    agent = PenshotFunction(language=Language.ZH, max_concurrent=5)
+    agent = PenshotFunction(language=ShotLanguage.ZH, max_concurrent=5)
 
     scripts = [
         "科幻场景：太空站内部，宇航员发现异常信号...",
@@ -156,7 +156,7 @@ async def with_custom_config():
 
     agent = PenshotFunction(
         config=custom_config,
-        language=Language.ZH,
+        language=ShotLanguage.ZH,
         max_concurrent=5
     )
 
@@ -174,7 +174,7 @@ async def with_queue_control():
     print("\n=== 队列控制示例 ===")
 
     # 创建低并发数的智能体
-    agent = PenshotFunction(language=Language.ZH, max_concurrent=2)
+    agent = PenshotFunction(language=ShotLanguage.ZH, max_concurrent=2)
 
     # 查看队列状态
     queue_status = agent.get_queue_status()
