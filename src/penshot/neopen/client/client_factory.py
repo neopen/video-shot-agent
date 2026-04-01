@@ -12,7 +12,7 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 from penshot.config.config import settings
-from penshot.config.config_models import LLMProviderConfig, EmbeddingProviderConfig
+from penshot.config.config_models import LLMBaseConfig, EmbeddingBaseConfig
 from penshot.logger import error, warning, info
 from penshot.neopen.client.base_client import BaseClient
 from penshot.neopen.client.client_config import ClientType, AIConfig, detect_ai_provider_by_url
@@ -92,7 +92,7 @@ def get_default_llm(**kwargs) -> Optional[BaseLanguageModel]:
             return None
 
 
-def _get_default_llm(ai_config: LLMProviderConfig, **kwargs) -> BaseLanguageModel:
+def _get_default_llm(ai_config: LLMBaseConfig, **kwargs) -> BaseLanguageModel:
     """
     获取默认的 LLM 客户端的语言模型实例（默认为 OpenAI）
 
@@ -123,14 +123,14 @@ def _fill_default_config(config: AIConfig, **kwargs) -> AIConfig:
     if not kwargs:
         return config
 
-    llm_config = config.llm or LLMProviderConfig()
+    llm_config = config.llm or LLMBaseConfig()
     llm_config.model_name= kwargs.get('model_name', llm_config.model_name)
     llm_config.base_url=kwargs.get('base_url', llm_config.base_url)
     llm_config.api_key=kwargs.get("api_key", llm_config.api_key)
     llm_config.temperature=kwargs.get("temperature", llm_config.temperature)
     llm_config.max_tokens=kwargs.get("max_tokens", llm_config.max_tokens)
 
-    embed_config = config.embed or EmbeddingProviderConfig()
+    embed_config = config.embed or EmbeddingBaseConfig()
     embed_config.model_name=kwargs.get('embed_model_name', embed_config.model_name)
     embed_config.base_url=kwargs.get('embed_base_url', embed_config.base_url)
     embed_config.api_key=kwargs.get("embed_api_key", embed_config.api_key)
@@ -204,7 +204,7 @@ def get_default_embedding(**kwargs) -> Optional[Embeddings]:
             return None
 
 
-def _get_default_embedding_client(ai_config: EmbeddingProviderConfig, **kwargs):
+def _get_default_embedding_client(ai_config: EmbeddingBaseConfig, **kwargs):
     """
     获取默认的 LLM 客户端的嵌入模型实例（默认为 OpenAI）
 

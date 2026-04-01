@@ -10,9 +10,12 @@ __author__ = "HiPeng"
 __all__ = [
     "HttpServer",
     "PenshotMCPServer",
+    "PenshotFunction",
     "Language",
     "ShotConfig",
 ]
+
+from penshot.api import PenshotFunction
 
 from penshot.http_server import HttpServer
 from penshot.mcp_server import PenshotMCPServer

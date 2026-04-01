@@ -22,6 +22,7 @@
 from penshot.api.function_calls import PenshotFunction, PenshotResult
 from penshot.neopen.shot_language import Language
 from penshot.neopen.shot_config import ShotConfig
+from penshot.api.function_calls import create_penshot_agent
 
 __version__ = "0.1.0"
 __author__ = "HiPeng"
@@ -30,5 +31,6 @@ __all__ = [
     "PenshotFunction",
     "PenshotResult",
     "Language",
+    "create_penshot_agent",
     "ShotConfig",
 ]

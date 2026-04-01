@@ -10,7 +10,7 @@ from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
 
-class LLMProviderConfig(BaseModel):
+class LLMBaseConfig(BaseModel):
     """LLM提供商配置"""
     base_url: str = Field(default="")  # https://api.openai.com/v1
     api_key: SecretStr = Field(default=SecretStr(""))
@@ -37,7 +37,7 @@ class LLMProviderConfig(BaseModel):
         return v
 
 
-class EmbeddingProviderConfig(BaseModel):
+class EmbeddingBaseConfig(BaseModel):
     """嵌入模型提供商配置"""
     base_url: str = Field(default="")  # https://api.openai.com/v1
     api_key: SecretStr = Field(default=SecretStr(""))
@@ -65,14 +65,14 @@ class EmbeddingProviderConfig(BaseModel):
 
 class LLMConfig(BaseModel):
     """LLM主配置"""
-    default: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
-    fallback: Optional[LLMProviderConfig] = Field(default_factory=LLMProviderConfig)
+    default: LLMBaseConfig = Field(default_factory=LLMBaseConfig)
+    fallback: Optional[LLMBaseConfig] = Field(default_factory=LLMBaseConfig)
 
 
 class EmbeddingConfig(BaseModel):
     """嵌入模型主配置"""
-    default: EmbeddingProviderConfig = Field(default_factory=EmbeddingProviderConfig)
-    fallback: EmbeddingProviderConfig = Field(default_factory=EmbeddingProviderConfig)
+    default: EmbeddingBaseConfig = Field(default_factory=EmbeddingBaseConfig)
+    fallback: EmbeddingBaseConfig = Field(default_factory=EmbeddingBaseConfig)
 
 
 class APIConfig(BaseModel):

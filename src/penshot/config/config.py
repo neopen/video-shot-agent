@@ -12,7 +12,8 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from penshot.config.config_loader import ConfigLoader
-from penshot.config.config_models import AppConfig, APIConfig, LLMConfig, EmbeddingConfig, PathsConfig, StoryboardConfig, LLMProviderConfig, EmbeddingProviderConfig
+from penshot.config.config_models import (AppConfig, APIConfig, LLMConfig, EmbeddingConfig,
+                                          PathsConfig, StoryboardConfig, LLMBaseConfig, EmbeddingBaseConfig)
 from penshot.utils.dotenv_loader import DotEnvLoader
 from penshot.utils.path_utils import PathResolver
 
@@ -73,11 +74,11 @@ class Settings(BaseSettings):
             init_settings,  # 初始化参数（最高）
         )
 
-    def get_llm_config(self, provider: str = "default") -> LLMProviderConfig:
+    def get_llm_config(self, provider: str = "default") -> LLMBaseConfig:
         """获取LLM配置（安全返回，不暴露 SecretStr 原始值）"""
         return self.llm.fallback if provider == "fallback" else self.llm.default
 
-    def get_embedding_config(self, provider: str = "default") -> EmbeddingProviderConfig:
+    def get_embedding_config(self, provider: str = "default") -> EmbeddingBaseConfig:
         """获取嵌入模型配置"""
         return self.embed.fallback if provider == "fallback" else self.embed.default
 
