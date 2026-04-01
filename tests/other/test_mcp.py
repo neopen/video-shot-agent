@@ -160,7 +160,7 @@ def test_mcp_server():
 
     print("启动 MCP Server...")
     process = subprocess.Popen(
-        [sys.executable, "-m", "penshot.api.mcp_server"],
+        [sys.executable, "-m", "penshot.mcp_server"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

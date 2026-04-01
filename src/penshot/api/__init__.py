@@ -14,14 +14,13 @@
     result = agent.breakdown_script("剧本内容")
 
 2. MCP 协议调用：
-    python -m penshot.api.mcp_server
+    python -m penshot.mcp_server
 
 3. REST API 调用：
     POST /api/storyboard
 """
 from penshot.api.function_calls import PenshotFunction, PenshotResult
 from penshot.neopen.shot_language import Language
-from penshot.neopen.shot_config import ShotConfig
 from penshot.api.function_calls import create_penshot_agent
 
 __version__ = "0.1.0"
@@ -32,5 +31,4 @@ __all__ = [
     "PenshotResult",
     "Language",
     "create_penshot_agent",
-    "ShotConfig",
 ]

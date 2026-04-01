@@ -12,12 +12,10 @@ __all__ = [
     "PenshotMCPServer",
     "PenshotFunction",
     "Language",
-    "ShotConfig",
 ]
 
 from penshot.api import PenshotFunction
 
 from penshot.http_server import HttpServer
 from penshot.mcp_server import PenshotMCPServer
-from penshot.neopen.shot_config import ShotConfig
 from penshot.neopen.shot_language import Language
