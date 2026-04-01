@@ -5,19 +5,21 @@
 @Github: https://github.com/neopen/video-shot-agent
 @Time: 2026/1/10 23:13
 """
-from typing import Dict, Type, List
+from typing import Dict, Type, List, Optional
 
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 from penshot.config.config import settings
+from penshot.config.config_models import LLMBaseConfig, EmbeddingBaseConfig
+from penshot.logger import error, warning, info
 from penshot.neopen.client.base_client import BaseClient
 from penshot.neopen.client.client_config import ClientType, AIConfig, detect_ai_provider_by_url
 from penshot.neopen.client.llm.deepseek_client import DeepSeekClient
 from penshot.neopen.client.llm.ollama_client import OllamaClient
 from penshot.neopen.client.llm.openai_client import OpenAIClient
 from penshot.neopen.client.llm.qwen_client import QwenClient
-from penshot.logger import error, warning, info
 from penshot.utils.log_utils import print_log_exception
 
 CLIENT_REGISTRY: Dict[ClientType, Type[BaseClient]] = {
@@ -57,11 +59,11 @@ def get_client(provider: ClientType, config: AIConfig) -> BaseClient:
     return client_class(config)
 
 
-def get_llm_client(config: AIConfig, **kwargs):
-    return get_llm_client_by_provider(detect_ai_provider_by_url(config.base_url), config, **kwargs)
+def get_llm_client(config: AIConfig, **kwargs) -> BaseLanguageModel:
+    return get_llm_client_by_provider(detect_ai_provider_by_url(config.llm.base_url), config, **kwargs)
 
 
-def get_llm_client_by_provider(provider: ClientType, config: AIConfig = None, **kwargs):
+def get_llm_client_by_provider(provider: ClientType, config: AIConfig = None, **kwargs) -> BaseLanguageModel:
     """
     获取指定 LLM 客户端的语言模型实例
 
@@ -76,7 +78,7 @@ def get_llm_client_by_provider(provider: ClientType, config: AIConfig = None, **
     return get_client(provider, fin_config).llm_model()
 
 
-def get_default_llm(**kwargs):
+def get_default_llm(**kwargs) -> Optional[BaseLanguageModel]:
     # 获取配置
     try:
         return _get_default_llm(settings.get_llm_config(), **kwargs)
@@ -90,7 +92,7 @@ def get_default_llm(**kwargs):
             return None
 
 
-def _get_default_llm(ai_config, **kwargs):
+def _get_default_llm(ai_config: LLMBaseConfig, **kwargs) -> BaseLanguageModel:
     """
     获取默认的 LLM 客户端的语言模型实例（默认为 OpenAI）
 
@@ -101,14 +103,7 @@ def _get_default_llm(ai_config, **kwargs):
     provider = detect_ai_provider_by_url(ai_config.base_url)
     info(f"使用AI提供商: {provider}, 模型: {ai_config.model_name}")
 
-    config = AIConfig(
-        model_name=ai_config.model_name,
-        api_key=ai_config.api_key,
-        base_url=ai_config.base_url,
-        temperature=ai_config.temperature,
-        timeout=ai_config.timeout,
-        max_tokens=ai_config.max_tokens,
-    )
+    config = AIConfig(llm=ai_config)
 
     fin_config = _fill_default_config(config, **kwargs)
 
@@ -123,22 +118,26 @@ def _get_default_llm(ai_config, **kwargs):
     return client.llm_model()
 
 
-def _fill_default_config(config: AIConfig = None, **kwargs) -> AIConfig:
+def _fill_default_config(config: AIConfig, **kwargs) -> AIConfig:
     """填充默认配置"""
-    config = config or AIConfig(
-        model_name=kwargs.get('model_name', 'gpt-4o'),
-        base_url=kwargs.get('base_url', ""),
-        api_key=kwargs.get("api_key", None),
-        temperature=kwargs.get("temperature", 0.1),
-        max_tokens=kwargs.get("max_tokens", 10000),
-    )
-
     if not kwargs:
         return config
 
-    for key, value in kwargs.items():
-        if hasattr(config, key) and value is not None:
-            setattr(config, key, value)
+    llm_config = config.llm or LLMBaseConfig()
+    llm_config.model_name= kwargs.get('model_name', llm_config.model_name)
+    llm_config.base_url=kwargs.get('base_url', llm_config.base_url)
+    llm_config.api_key=kwargs.get("api_key", llm_config.api_key)
+    llm_config.temperature=kwargs.get("temperature", llm_config.temperature)
+    llm_config.max_tokens=kwargs.get("max_tokens", llm_config.max_tokens)
+
+    embed_config = config.embed or EmbeddingBaseConfig()
+    embed_config.model_name=kwargs.get('embed_model_name', embed_config.model_name)
+    embed_config.base_url=kwargs.get('embed_base_url', embed_config.base_url)
+    embed_config.api_key=kwargs.get("embed_api_key", embed_config.api_key)
+
+    config.llm = llm_config
+    config.embed = embed_config
+
     return config
 
 
@@ -175,21 +174,21 @@ def _convert_messages(messages: List[Dict[str, str]]):
 
 
 ################################# 获取嵌入模型实例 #################################
-def get_embedding_client(provider: ClientType, config: AIConfig):
+def get_embedding_client(config: AIConfig) -> Embeddings:
     """
     获取指定 LLM 客户端的嵌入模型实例
 
     Args:
-        provider: 支持 'openai', 'ollama', 'deepseek', 'qwen'
+        支持 'openai', 'ollama', 'deepseek', 'qwen'
         config: 传递给具体客户端的参数（如 model, temperature, api_key 等）
     Returns:
         嵌入模型实例
     """
-    client = get_client(provider, config)
+    client = get_client(detect_ai_provider_by_url(config.embed.base_url), config)
     return client.llm_embed()
 
 
-def get_default_embedding_client(**kwargs):
+def get_default_embedding(**kwargs) -> Optional[Embeddings]:
     # 获取配置
     try:
         ai_config = settings.get_embedding_config()
@@ -205,7 +204,7 @@ def get_default_embedding_client(**kwargs):
             return None
 
 
-def _get_default_embedding_client(ai_config, **kwargs):
+def _get_default_embedding_client(ai_config: EmbeddingBaseConfig, **kwargs):
     """
     获取默认的 LLM 客户端的嵌入模型实例（默认为 OpenAI）
 
@@ -215,12 +214,7 @@ def _get_default_embedding_client(ai_config, **kwargs):
     provider = detect_ai_provider_by_url(ai_config.base_url)
     info(f"使用AI提供商: {provider}, 嵌入模型: {ai_config.model_name}")
 
-    config = AIConfig(
-        model_name=ai_config.model_name,
-        base_url=ai_config.base_url,
-        timeout=ai_config.timeout,
-        api_key=ai_config.api_key
-    )
+    config = AIConfig(embed=ai_config)
 
     fin_config = _fill_default_config(config, **kwargs)
 
@@ -234,20 +228,19 @@ def _get_default_embedding_client(ai_config, **kwargs):
     return client.llm_embed()
 
 
-def embed_client_query(provider: ClientType, text: str, config: AIConfig = None, **kwargs) -> List[float]:
+def embed_client_query(text: str, config: AIConfig, **kwargs) -> List[float]:
     """
     获取指定 LLM 客户端的文本嵌入向量
 
     Args:
-        provider: 支持 'openai', 'ollama', 'deepseek', 'qwen'
+        支持 'openai', 'ollama', 'deepseek', 'qwen'
         config: 传递给具体客户端的参数（如 model, temperature, api_key 等）
         text: 需要嵌入的文本
     Returns:
         文本嵌入向量
     """
     fin_config = _fill_default_config(config, **kwargs)
-
-    client = get_embedding_client(provider, fin_config)
+    client = get_embedding_client(fin_config)
     return client.embed_query(text)
 
 

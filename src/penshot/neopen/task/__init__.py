@@ -11,7 +11,7 @@ Expose API-friendly models and core classes for easier imports.
 from .task_models import (
     ProcessingStatus,
     CallbackPayload,
-    APIResponse, BatchTaskResponse, TaskResponse,
+    APIResponse, BatchTaskResponse, TaskResponse, TaskStatus,
 )
 
 from .task_manager import TaskManager
@@ -25,6 +25,7 @@ __all__ = [
     "BatchTaskResponse",
     "CallbackPayload",
     "APIResponse",
+    "TaskStatus",
     # runtime classes
     "TaskManager",
     "AsyncTaskProcessor",

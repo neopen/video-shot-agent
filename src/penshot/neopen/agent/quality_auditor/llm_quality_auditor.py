@@ -30,13 +30,17 @@ class LLMQualityAuditor(BaseQualityAuditor, BaseLLMAgent):
         self.last_llm_result = None
         self.last_audit_time = 0
 
-    def audit(self, instructions: AIVideoInstructions) -> QualityAuditReport:
+    # llm_quality_auditor.py - 修改 audit 和 _call_llm_audit 方法
+
+    def audit(self, instructions: AIVideoInstructions,
+              historical_context: Optional[Dict[str, Any]] = None) -> QualityAuditReport:
         """执行LLM深度审查"""
         info(f"执行LLM深度审查，片段数: {len(instructions.fragments)}")
 
         if self._should_run_llm_audit(instructions):
             try:
-                llm_result = self._call_llm_audit(instructions)
+                # 将历史上下文传递给 LLM 调用
+                llm_result = self._call_llm_audit(instructions, historical_context)
                 validated_result = self._validate_llm_result(llm_result, instructions)
                 self.last_llm_result = validated_result
                 self.last_audit_time = time.time()
@@ -49,17 +53,8 @@ class LLMQualityAuditor(BaseQualityAuditor, BaseLLMAgent):
             info("使用缓存的LLM审查结果")
             return self._convert_to_report(self.last_llm_result, instructions)
 
-    def _should_run_llm_audit(self, instructions: AIVideoInstructions) -> bool:
-        """判断是否应该执行LLM审查"""
-        if self.last_llm_result is None:
-            return True
-        if time.time() - self.last_audit_time > 300:
-            return True
-        if len(instructions.fragments) != len(self.last_llm_result.get("fragments_checked", [])):
-            return True
-        return False
-
-    def _call_llm_audit(self, instructions: AIVideoInstructions) -> Dict[str, Any]:
+    def _call_llm_audit(self, instructions: AIVideoInstructions,
+                        historical_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """调用LLM进行审查"""
         fragments_data = []
         for i, frag in enumerate(instructions.fragments):
@@ -72,7 +67,16 @@ class LLMQualityAuditor(BaseQualityAuditor, BaseLLMAgent):
             }
             fragments_data.append(frag_data)
 
+        # 构建基础用户提示词
         user_prompt = self._build_audit_prompt(instructions)
+
+        # 构建历史上下文提示
+        history_hint = self._build_history_hint(historical_context)
+
+        # 如果有历史上下文，将其整合到提示词中
+        if history_hint:
+            user_prompt = f"{user_prompt}\n\n{history_hint}"
+
         system_prompt = self._get_prompt_template("quality_auditor_system")
 
         debug("调用LLM进行质量审查")
@@ -102,6 +106,81 @@ class LLMQualityAuditor(BaseQualityAuditor, BaseLLMAgent):
                 "quality_score": 0,
                 "timestamp": time.time()
             }
+
+    def _build_history_hint(self, historical_context: Optional[Dict[str, Any]]) -> str:
+        """构建历史上下文提示"""
+        if not historical_context:
+            return ""
+
+        hints = []
+
+        # 1. 历史审计结果
+        historical_audit_results = historical_context.get("historical_audit_results")
+        if historical_audit_results and isinstance(historical_audit_results, list):
+            issue_stats = {}
+            for result in historical_audit_results[-20:]:
+                status = result.get("status") if isinstance(result, dict) else getattr(result, "status", None)
+                if status in ["failed", "critical"]:
+                    violations = result.get("violations", []) if isinstance(result, dict) else getattr(result, "violations", [])
+                    for v in violations:
+                        issue_type = self._extract_issue_type(v)
+                        issue_stats[issue_type] = issue_stats.get(issue_type, 0) + 1
+
+            if issue_stats:
+                sorted_issues = sorted(issue_stats.items(), key=lambda x: x[1], reverse=True)
+                top_issues = [f"{t}({c}次)" for t, c in sorted_issues[:3]]
+                hints.append(f"【历史常见问题】{', '.join(top_issues)}，请重点关注这些问题类型。")
+
+        # 2. 成功修复模式
+        successful_repair_patterns = historical_context.get("successful_repair_patterns")
+        if successful_repair_patterns and isinstance(successful_repair_patterns, list):
+            successful_issue_types = set()
+            for pattern in successful_repair_patterns[:10]:
+                if isinstance(pattern, dict):
+                    issue_types = pattern.get("issue_types", [])
+                    successful_issue_types.update(issue_types)
+
+            if successful_issue_types:
+                hints.append(f"【历史成功修复】以下问题类型有成功修复经验: {', '.join(list(successful_issue_types)[:5])}，可参考历史修复策略。")
+
+        # 3. 历史质量趋势
+        if historical_audit_results and len(historical_audit_results) >= 5:
+            recent_scores = []
+            for r in historical_audit_results[-5:]:
+                if isinstance(r, dict):
+                    score = r.get("score", 0)
+                else:
+                    score = getattr(r, "score", 0)
+                recent_scores.append(score)
+            avg_score = sum(recent_scores) / len(recent_scores)
+            if avg_score < 70:
+                hints.append(f"【质量趋势】近期审查平均分数偏低({avg_score:.0f}分)，建议严格审查。")
+            elif avg_score > 85:
+                hints.append(f"【质量趋势】近期审查质量良好({avg_score:.0f}分)，保持标准。")
+
+        if not hints:
+            return ""
+
+        return "\n".join([
+            "",
+            "=" * 40,
+            "【历史审查参考】",
+            *hints,
+            "=" * 40,
+            ""
+        ])
+
+
+    def _should_run_llm_audit(self, instructions: AIVideoInstructions) -> bool:
+        """判断是否应该执行LLM审查"""
+        if self.last_llm_result is None:
+            return True
+        if time.time() - self.last_audit_time > 300:
+            return True
+        if len(instructions.fragments) != len(self.last_llm_result.get("fragments_checked", [])):
+            return True
+        return False
+
 
     def _build_audit_prompt(self, instructions: AIVideoInstructions) -> str:
         """构建审查提示词"""

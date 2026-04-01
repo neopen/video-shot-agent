@@ -4,6 +4,7 @@ changelog: |
   - 2026-03-15: 优化情感枚举
   - 2026-03-10: 修复音频参数
   - 2026-03-28: 添加修复参数，通过修复建议和问题修复问题
+  - 2026-03-30: 添加 history_hint 参数，支持记忆功能的 历史上下文提示
 
 prompt_converter_system:
   name: "prompt_converter_system"
@@ -86,6 +87,8 @@ prompt_converter_user:
       {scene_info}
     
     {repair_hint}
+    
+    {history_hint}
     
     【本片段原始元素】
       {element_info}

@@ -7,7 +7,7 @@ version = {attr = "penshot.__version__"}
 
 [project]
 name = "penshot"
-version = "0.2.1"
+version = "0.2.2"
 description = "长剧本分镜智能体：支持将任意自然语言剧本，转换为结构化分镜数据，支持视频生成与编辑。"
 readme = "README.md"
 authors = [
@@ -63,6 +63,7 @@ dependencies = [
     "numpy>=1.24.0",
     "jieba>=0.42.1",
     "redis",
+    "chromadb",
 
     # 工具库
 #    "requests>=2.31.0",
@@ -112,7 +113,7 @@ full = [
 [project.urls]
 Homepage = "https://github.com/neopen/video-shot-agent"
 Repository = "https://github.com/neopen/video-shot-agent"
-Documentation = "https://github.com/neopen/video-shot-agent#README"
+Documentation = "https://github.com/neopen/video-shot-agent/blob/main/docs/#PenShot"
 Changelog = "https://github.com/neopen/video-shot-agent/releases"
 Issues = "https://github.com/neopen/video-shot-agent/issues"
 

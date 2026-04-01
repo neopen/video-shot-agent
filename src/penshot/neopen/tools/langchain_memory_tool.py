@@ -11,9 +11,10 @@ from typing import List, Dict, Any, Optional
 
 from langchain.docstore.document import Document
 from langchain.memory import VectorStoreRetrieverMemory
+from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
 
-from penshot.neopen.client.client_factory import get_default_embedding_client
+from penshot.neopen.client.client_factory import get_default_embedding
 from penshot.logger import debug, warning, error
 from penshot.utils.log_utils import print_log_exception
 
@@ -40,7 +41,7 @@ class LangChainMemoryTool:
         try:
             # 初始化嵌入模型
             debug("开始初始化嵌入模型...")
-            self.embeddings = get_default_embedding_client()
+            self.embeddings = get_default_embedding()
 
             if not self.embeddings:
                 debug("嵌入模型为None")
@@ -122,7 +123,7 @@ class LangChainMemoryTool:
             是否兼容
         """
         # 检查是否是llama_index的OllamaEmbedding
-        if isinstance(embeddings, LlamaOllamaEmbedding):
+        if isinstance(embeddings, OllamaEmbeddings):
             debug("检测到llama_index的OllamaEmbedding，添加专用适配器")
             # 使用包装类替换原始嵌入模型
             wrapper = self._add_llama_index_embeddings_adapter(embeddings)

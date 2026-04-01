@@ -9,7 +9,7 @@ from abc import abstractmethod, ABC
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-from penshot.logger import info, warning
+from penshot.logger import info, warning, debug
 from penshot.neopen.agent.base_models import ScriptType, ElementType
 from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityRepairParams
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript, SceneInfo, CharacterInfo, BaseElement, \
@@ -27,7 +27,8 @@ class BaseScriptParser(ABC):
         self.complexity_assessor = ComplexityAssessor()
 
     @abstractmethod
-    def parser(self, script_text: Any, script_format: ScriptType, repair_params: Optional[QualityRepairParams]) -> ParsedScript:
+    def parser(self, script_text: Any, script_format: ScriptType
+               , repair_params: Optional[QualityRepairParams], historical_context: Optional[Dict[str, Any]]) -> ParsedScript:
         """处理输入数据（子类实现）"""
         raise NotImplementedError("子类必须实现process方法")
 
@@ -60,7 +61,7 @@ class BaseScriptParser(ABC):
         if not parsed_script.metadata.get("parser_type"):
             parsed_script.metadata["parser_type"] = self.__class__.__name__
 
-        info(f"解析完成: {total_elements}个元素, {len(parsed_script.scenes)}个场景")
+        debug(f"解析完成: {total_elements}个元素, {len(parsed_script.scenes)}个场景")
         return parsed_script
 
     def validate_parsed_result(self, parsed_script: ParsedScript) -> bool:

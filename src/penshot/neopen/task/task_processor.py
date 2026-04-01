@@ -15,7 +15,7 @@ from penshot.logger import info, warning, error, debug
 from penshot.neopen.shot_config import ShotConfig
 from penshot.neopen.task.task_handler import CallbackHandler
 from penshot.neopen.task.task_manager import TaskManager
-from penshot.neopen.task.task_models import CallbackPayload, TaskPriority, TaskStatus, TaskResponse
+from penshot.neopen.task.task_models import CallbackPayload, TaskPriority, TaskStatus, TaskResponse, TaskStage
 from penshot.utils.log_utils import print_log_exception
 from penshot.utils.obj_utils import dict_to_obj
 
@@ -243,6 +243,7 @@ class AsyncTaskProcessor:
             new_avg = (current_avg * total + wait_ms) / (total + 1)
             self._stats["avg_wait_time_ms"] = new_avg
 
+
     async def _execute_task(self, queued_task: QueuedTask):
         """执行单个任务"""
         task_id = queued_task.task_id
@@ -253,11 +254,14 @@ class AsyncTaskProcessor:
             async with self._semaphore:
                 debug(f"开始执行任务: {task_id}, 活跃任务数: {self._active_count}")
 
+                # 更新任务状态为 PROCESSING
+                self.task_manager.update_task_status(task_id, TaskStatus.PROCESSING)
+                self.task_manager.update_task_progress_detail(task_id, TaskStage.INIT, 0)
+
                 # 执行实际的任务处理
                 result = await self._process_script_task_internal(task_id)
 
                 self._stats["total_completed"] += 1
-                info(f"任务完成: {task_id}")
 
                 # 触发回调
                 if queued_task.callback:
@@ -274,20 +278,23 @@ class AsyncTaskProcessor:
             self._stats["total_cancelled"] += 1
             warning(f"任务被取消: {task_id}")
             self.task_manager.fail_task(task_id, "任务被取消")
+            self.task_manager.update_task_status(task_id, TaskStatus.CANCELLED)
 
         except Exception as e:
             self._stats["total_failed"] += 1
             error(f"任务执行失败: {task_id}, 错误: {str(e)}")
             print_log_exception()
             self.task_manager.fail_task(task_id, str(e))
+            self.task_manager.update_task_status(task_id, TaskStatus.FAILED)
 
         finally:
             self._active_count -= 1
             self._active_tasks.pop(task_id, None)
             debug(f"任务结束: {task_id}, 剩余活跃: {self._active_count}")
 
+
     async def _process_script_task_internal(self, task_id: str) -> TaskResponse:
-        """内部任务处理逻辑，返回 TaskResponse"""
+        """内部任务处理逻辑"""
         task = self.task_manager.get_task(task_id)
         if not task:
             return TaskResponse(
@@ -302,16 +309,17 @@ class AsyncTaskProcessor:
         try:
             # 更新状态为处理中
             self.task_manager.update_task_progress(task_id, "processing", 10)
+            self.task_manager.update_task_progress_detail(task_id, TaskStage.INIT, 0)
 
             # 获取工作流实例
-            workflow = self.task_manager.get_workflow(task_id, config)
+            workflow = self.task_manager.get_workflow(self.task_manager, task_id, config)
 
-            # 执行处理
-            self.task_manager.update_task_progress(task_id, "parsing_script", 20)
+            # 执行处理 - 工作流内部会更新详细进度
+            self.task_manager.update_task_progress_detail(task_id, TaskStage.PARSING_START, 0)
             result_dict = await workflow.run_process(task["script"], config)
 
-            # 更新进度
-            self.task_manager.update_task_progress(task_id, "finalizing", 90)
+            # 更新最终进度
+            self.task_manager.update_task_progress_detail(task_id, TaskStage.COMPLETE, 100)
 
             # 获取时间信息
             created_at = task.get("created_at")
@@ -323,12 +331,10 @@ class AsyncTaskProcessor:
                 except:
                     created_at = None
 
-            # 计算处理时间
             processing_time_ms = None
             if created_at and completed_at:
                 processing_time_ms = int((completed_at - created_at).total_seconds() * 1000)
 
-            # 创建 TaskResponse
             result = TaskResponse(
                 task_id=task_id,
                 success=result_dict.get("success", False),
@@ -340,10 +346,8 @@ class AsyncTaskProcessor:
                 completed_at=completed_at
             )
 
-            # 完成任务
             self.task_manager.complete_task(task_id, result_dict)
 
-            # 处理回调
             if task.get("callback_url"):
                 await self._handle_callback(task_id, result_dict)
 
@@ -351,14 +355,16 @@ class AsyncTaskProcessor:
 
         except Exception as e:
             error(f"任务处理失败: {task_id}, 错误: {str(e)}")
+            print_log_exception()
+            self.task_manager.update_task_progress_detail(task_id, TaskStage.ERROR_HANDLING, 0, {"error": str(e)})
 
-            # 创建错误响应
             return TaskResponse(
                 task_id=task_id,
                 success=False,
                 status=TaskStatus.FAILED,
                 error=str(e)
             )
+
 
     async def _handle_callback(self, task_id: str, result: Dict):
         """处理回调通知"""

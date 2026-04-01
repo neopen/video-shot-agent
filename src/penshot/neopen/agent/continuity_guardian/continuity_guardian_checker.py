@@ -50,6 +50,10 @@ class ContinuityGuardianChecker:
     def _create_issue(self, issue_type: ContinuityIssueType, description: str,
                       severity: ContinuitySeverity, **kwargs) -> ContinuityIssue:
         """创建连续性问题"""
+        # 截断过长的描述（限制500字符）
+        if len(description) > 500:
+            description = description[:497] + "..."
+
         return ContinuityIssue(
             id=f"{issue_type.value}_{uuid.uuid4().hex[:8]}",
             type=issue_type,
@@ -231,28 +235,19 @@ class ContinuityGuardianChecker:
 
         unique_styles = set(styles)
         if len(unique_styles) > 2:
+            # 限制风格列表长度，避免描述过长
+            style_list = list(unique_styles)
+            if len(style_list) > 5:
+                style_list = style_list[:5] + ["..."]
+
             result.add_issue(self._create_issue(
                 issue_type=ContinuityIssueType.STYLE_INCONSISTENT,
-                description=f"检测到{len(unique_styles)}种不同风格: {', '.join(unique_styles)}",
+                description=f"检测到{len(unique_styles)}种不同风格: {', '.join(style_list)}",
                 severity=ContinuitySeverity.MODERATE,
                 suggestion="统一使用1-2种视觉风格保持连贯性",
                 source_stage=PipelineNode.CONVERT_PROMPT.value
             ))
 
-        prev_style = None
-        for i, prompt in enumerate(instructions.fragments):
-            if prev_style and prompt.style and prev_style != prompt.style:
-                result.add_issue(self._create_issue(
-                    issue_type=ContinuityIssueType.STYLE_SUDDEN_CHANGE,
-                    description=f"风格突变: {prev_style} -> {prompt.style}",
-                    severity=ContinuitySeverity.WARNING,
-                    fragment_id=prompt.fragment_id,
-                    position=i,
-                    suggestion="考虑添加风格过渡",
-                    source_stage=PipelineNode.CONVERT_PROMPT.value,
-                    auto_fixable=True
-                ))
-            prev_style = prompt.style
 
     def check_time_continuity(self, context: Dict[str, Any],
                               result: ContinuityCheckResult) -> None:

@@ -11,14 +11,14 @@ from typing import Dict, Any
 import yaml
 
 from penshot.neopen.config.base_config import BaseConfig
-from penshot.neopen.shot_language import Language
+from penshot.neopen.shot_language import ShotLanguage
 from penshot.logger import debug, error
 
 
 class KeywordConfig(BaseConfig):
     """统一关键词配置加载器"""
 
-    def _initialize_config(self, language: Language = Language.ZH):
+    def _initialize_config(self, language: ShotLanguage = ShotLanguage.ZH):
         """
         初始化关键词配置加载器
         
@@ -33,7 +33,7 @@ class KeywordConfig(BaseConfig):
         """
         return "keyword_config.yaml"
 
-    def get_other_keywords(self, category: str, language: Language = None) -> Dict[str, Any]:
+    def get_other_keywords(self, category: str, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取其他分类的关键词
 
@@ -45,7 +45,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords(category, language)
 
-    def get_pose_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_pose_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取姿态相关关键词
         
@@ -57,7 +57,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('pose_keywords', language)
 
-    def get_action_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_action_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取动作识别相关关键词
         
@@ -69,7 +69,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('action_keywords', language)
 
-    def get_emotion_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_emotion_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取情绪相关关键词
         
@@ -81,7 +81,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('emotion_keywords', language)
 
-    def get_scene_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_scene_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取场景相关关键词
         
@@ -93,7 +93,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('scene_keywords', language)
 
-    def get_character_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_character_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取角色相关关键词
         
@@ -105,7 +105,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('character_keywords', language)
 
-    def get_dialogue_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_dialogue_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取对话相关关键词
         
@@ -117,7 +117,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('dialogue_keywords', language)
 
-    def get_position_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_position_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取位置相关关键词
         
@@ -129,7 +129,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('position_keywords', language)
 
-    def get_prop_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_prop_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取道具相关关键词
         
@@ -141,7 +141,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('prop_keywords', language)
 
-    def get_action_split_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_action_split_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取动作拆分相关关键词
         
@@ -153,7 +153,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('action_split_keywords', language)
 
-    def get_gaze_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_gaze_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取视线方向相关关键词
         
@@ -165,7 +165,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('gaze_keywords', language)
 
-    def get_state_keywords(self, language: Language = None) -> Dict[str, Any]:
+    def get_state_keywords(self, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         获取状态特征相关关键词
         
@@ -177,7 +177,7 @@ class KeywordConfig(BaseConfig):
         """
         return self._get_keywords('state_keywords', language)
 
-    def _get_keywords(self, category: str, language: Language = None) -> Dict[str, Any]:
+    def _get_keywords(self, category: str, language: ShotLanguage = None) -> Dict[str, Any]:
         """
         内部方法：获取指定分类和语言的关键词
         

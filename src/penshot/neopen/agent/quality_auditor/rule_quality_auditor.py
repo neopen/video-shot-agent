@@ -5,7 +5,7 @@
 @Github: https://github.com/neopen/video-shot-agent
 @Time: 2026/1/27 0:00
 """
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from penshot.logger import info, warning
 from penshot.neopen.agent.base_models import parse_model_name
@@ -25,7 +25,7 @@ class RuleQualityAuditor(BaseQualityAuditor):
         self.last_audit_result = None
         self.audit_count = 0
 
-    def audit(self, instructions: AIVideoInstructions) -> QualityAuditReport:
+    def audit(self, instructions: AIVideoInstructions, historical_context: Optional[Dict[str, Any]] = None) -> QualityAuditReport:
         """执行基本规则审查"""
         info(f"开始基本规则审查，片段数: {len(instructions.fragments)}")
 

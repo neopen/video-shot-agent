@@ -11,8 +11,8 @@ from typing import Any
 
 import yaml
 
-from penshot.neopen.shot_language import Language, get_language
-from penshot.logger import info, error, warning
+from penshot.logger import error, warning, debug
+from penshot.neopen.shot_language import ShotLanguage, get_language
 
 
 class BaseConfig:
@@ -33,8 +33,8 @@ class BaseConfig:
     def _set_config_path(self):
         """设置配置文件路径"""
         # 根据语言选择配置文件路径
-        if self._language == Language.EN:
-            self.config_path =  Path(__file__).parent / "en" / self._config_file_name()
+        if self._language == ShotLanguage.EN:
+            self.config_path = Path(__file__).parent / "en" / self._config_file_name()
         else:
             self.config_path = Path(__file__).parent / "zh" / self._config_file_name()
 
@@ -44,7 +44,7 @@ class BaseConfig:
         pass
 
     @abstractmethod
-    def _initialize_config(self, language: Language = Language.ZH):
+    def _initialize_config(self, language: ShotLanguage = ShotLanguage.ZH):
         """初始化配置（子类必须实现）"""
         pass
 
@@ -69,7 +69,7 @@ class BaseConfig:
 
             self._load_config()
 
-            info(f"成功加载配置文件: {self.config_path}")
+            debug(f"成功加载配置文件: {self.config_path}")
         except FileNotFoundError:
             error(f"配置文件不存在: {self.config_path}")
             self._config_data = {}
@@ -77,8 +77,7 @@ class BaseConfig:
             error(f"加载配置文件时发生错误: {str(e)}")
             self._config_data = {}
 
-
-    def set_language(self, language: Language):
+    def set_language(self, language: ShotLanguage):
         """
         设置语言
 

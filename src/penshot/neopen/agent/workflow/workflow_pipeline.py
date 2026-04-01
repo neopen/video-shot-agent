@@ -5,13 +5,13 @@
 @Github: https://github.com/neopen/video-shot-agent
 @Time: 2025/10 - 至今
 """
-from typing import Dict, Optional, Any
+from typing import Dict, Any
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, END
 
-from penshot.neopen.agent.script_parser_agent import ScriptParserAgent
 from penshot.logger import debug, error, info, warning
+from penshot.neopen.agent.script_parser_agent import ScriptParserAgent
 from penshot.utils.log_utils import print_log_exception
 from .workflow_decision import PipelineDecision
 from .workflow_models import AgentStage, PipelineNode, PipelineState
@@ -28,18 +28,21 @@ from ...shot_config import ShotConfig
 class MultiAgentPipeline:
     """多智能体协作流程"""
 
-    def __init__(self, task_id, config: Optional[ShotConfig]):
+    def __init__(self, task_id, script_id, config: ShotConfig, task_manager):
         """
         初始化多智能体流程
         
         Args:
-            task_id: 任务ID
+            script_id: 剧本ID
             config: 用户配置（LLM）
         """
+        self.script_id = script_id
         self.task_id = task_id
         self.memory = MemorySaver()  # 状态记忆器
         self.config = config or ShotConfig()
         self.llm = self.config.get_llm_by_config()
+        self.embeddings = self.config.get_embed_by_config()
+        self.task_manager = task_manager
         self._init_agents()
         self.workflow = self._build_workflow()
 
@@ -55,12 +58,15 @@ class MultiAgentPipeline:
 
         # 初始化工作流节点集合
         self.workflow_nodes = WorkflowNodes(
+            script_id=self.script_id,
             script_parser=self.script_parser,
             shot_segmenter=self.shot_segmenter,
             video_splitter=self.video_splitter,
             prompt_converter=self.prompt_converter,
             quality_auditor=self.quality_auditor,
-            llm=self.llm
+            llm=self.llm,
+            embeddings=self.embeddings,
+            task_manager=self.task_manager
         )
         # 工作流决策函数
         self.decision_funcs = PipelineDecision()
@@ -316,6 +322,7 @@ class MultiAgentPipeline:
             raw_script=raw_script,
             user_config=config or {},
             task_id=self.task_id,
+            script_id=self.script_id,
             current_stage=AgentStage.INIT,
             # 镜头及片段参数
             max_shot_duration=config.max_shot_duration,
@@ -348,12 +355,11 @@ class MultiAgentPipeline:
             # )
 
             final_result = await self._enhanced_workflow_execution(initial_state)
-            info(f"工作流执行完成，最终状态类型: {type(final_result)}")
 
             # 处理返回结果
             success = final_result.get("success", False)
             data = final_result.get("data")
-            info(f"工作流执行结果: success={success}, has_data={data is not None}")
+            info(f"工作流执行完成，结果: success={success}, has_data={data is not None}")
 
             # 如果需要，可以添加额外的验证
             if success and data:
@@ -502,9 +508,7 @@ class MultiAgentPipeline:
             # )
 
             # 验证修复结果
-            if self._validate_fixed_result(final_result):
-                info("工作流输出修复验证通过")
-            else:
+            if not self._validate_fixed_result(final_result):
                 warning("工作流输出修复验证有问题，但继续返回结果")
 
             return self.output_fixer.parse_result_to_dict(final_result)
@@ -577,7 +581,7 @@ class MultiAgentPipeline:
             if len(fragments_with_audio_prompts) < len(fragments) * 0.5:  # 至少50%的片段应该有音频提示词
                 warning(f"片段中音频提示词缺失较多: {len(fragments_with_audio_prompts)}/{len(fragments)}个片段有音频提示词")
 
-            info(f"验证通过: {len(fragments)}个片段")
+            info(f"工作流输出修复验证通过: {len(fragments)}个片段")
             return True
 
         except Exception as e:

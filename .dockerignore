@@ -14,8 +14,7 @@ dist/
 
 # Logs and runtime data
 logs/
-data/output/
-data/vectorstore_db/
+data/
 *.log
 
 # Editor and OS files

@@ -13,12 +13,12 @@ import yaml
 
 from penshot.neopen.config.base_config import BaseConfig
 from penshot.logger import debug, warning, error
-from penshot.neopen.shot_language import Language
+from penshot.neopen.shot_language import ShotLanguage
 
 class ScriptParserConfig(BaseConfig):
     """剧本解析器配置类"""
     
-    def _initialize_config(self, language: Language = Language.ZH):
+    def _initialize_config(self, language: ShotLanguage = ShotLanguage.ZH):
         """初始化配置类
         
         Args:
@@ -58,7 +58,7 @@ class ScriptParserConfig(BaseConfig):
         # 检查缓存是否存在
         if cache_key in self._config_cache:
             # 根据语言选择配置文件路径
-            if self._language == Language.EN:
+            if self._language == ShotLanguage.EN:
                 # 英文配置文件放在en子目录下
                 config_path = os.path.join(os.path.dirname(__file__), 'en', f'{config_filename}')
             else:
@@ -80,7 +80,7 @@ class ScriptParserConfig(BaseConfig):
         self._config_cache[cache_key] = config_data
         
         # 更新缓存时间和文件修改时间
-        if self._language == Language.EN:
+        if self._language == ShotLanguage.EN:
             config_path = os.path.join(os.path.dirname(__file__), 'en', f'{config_filename}')
         else:
             config_path = os.path.join(os.path.dirname(__file__), 'zh', config_filename)
@@ -323,7 +323,7 @@ class ScriptParserConfig(BaseConfig):
         """
         try:
             # 根据语言选择配置文件路径
-            if self._language == Language.EN:
+            if self._language == ShotLanguage.EN:
                 # 英文配置文件放在en子目录下
                 config_path = os.path.join(os.path.dirname(__file__), 'en', config_filename)
             else:

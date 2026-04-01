@@ -6,12 +6,12 @@
 @Time: 2026/1/22 22:00
 """
 import time
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from penshot.logger import debug, error, info
 from penshot.neopen.agent.base_models import AgentMode
 from penshot.neopen.agent.base_repairable_agent import BaseRepairableAgent
-from penshot.neopen.agent.quality_auditor.quality_auditor_models import BasicViolation, SeverityLevel, IssueType, RuleType, QualityRepairParams
+from penshot.neopen.agent.quality_auditor.quality_auditor_models import BasicViolation, SeverityLevel, IssueType, RuleType
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript
 from penshot.neopen.agent.shot_segmenter.shot_segmenter_models import ShotSequence
 from penshot.neopen.agent.video_splitter.video_splitter_factory import VideoSplitterFactory
@@ -44,11 +44,33 @@ class VideoSplitterAgent(BaseRepairableAgent[FragmentSequence, ShotSequence]):
         self.split_history = []
         self.last_fragment_sequence = None
 
-    def process(self, shot_sequence: ShotSequence, parsed_script: ParsedScript, repair_params: Optional[QualityRepairParams]) -> Optional[FragmentSequence]:
-        if repair_params:
-            self.current_repair_params = repair_params
+        # 历史上下文相关变量
+        self._common_issue_patterns: Dict[str, int] = {}
+        self._focus_on_duration_control: bool = False
+        self._focus_on_continuity: bool = False
+        self._focus_on_description_quality: bool = False
+        self._need_extra_validation: bool = False
 
-        return self.video_process(shot_sequence, parsed_script, repair_params)
+
+    def process(self, shot_sequence: ShotSequence, parsed_script: ParsedScript) -> Optional[FragmentSequence]:
+        """
+        处理视频分割
+
+        直接使用 self.current_repair_params 和 self.current_historical_context
+        """
+        # 使用历史上下文优化策略
+        if self.current_historical_context:
+            debug("使用历史上下文优化视频分割")
+
+            # 根据历史问题调整分割策略
+            if self._focus_on_duration_control:
+                debug("启用时长控制增强模式")
+            if self._focus_on_continuity:
+                debug("启用连续性增强模式")
+            if self._focus_on_description_quality:
+                debug("启用描述质量增强模式")
+
+        return self.video_process(shot_sequence, parsed_script)
 
     def repair_result(self, fragment_sequence: FragmentSequence, issues: List[BasicViolation],
                       shot_sequence: ShotSequence) -> FragmentSequence:
@@ -59,23 +81,88 @@ class VideoSplitterAgent(BaseRepairableAgent[FragmentSequence, ShotSequence]):
                       shot_sequence: ShotSequence) -> List[BasicViolation]:
         return self.detect_video_issues(fragment_sequence, shot_sequence)
 
-    def video_process(self, shot_sequence: ShotSequence, parsed_script: ParsedScript,
-                      repair_params: Optional[QualityRepairParams] = None) -> Optional[FragmentSequence]:
+    def _on_historical_context_applied(self) -> None:
+        """历史上下文应用后的自定义处理"""
+        if not self.current_historical_context:
+            return
+
+        insights = self.get_historical_insights()
+
+        # 使用基类方法获取高频问题
+        high_freq_issues = insights.get("high_freq_issues", {})
+
+        if "fragment_duration_too_long" in high_freq_issues:
+            info("根据历史经验，片段时长过长问题频繁，将加强时长控制")
+            self._focus_on_duration_control = True
+
+        if "fragment_duration_too_short" in high_freq_issues:
+            info("根据历史经验，片段时长过短问题频繁，将调整分割策略")
+            self._focus_on_duration_control = True
+
+        if "fragment_time_gap" in high_freq_issues or "fragment_overlap" in high_freq_issues:
+            info("根据历史经验，时间连续性问题频繁，将加强连续性检查")
+            self._focus_on_continuity = True
+
+        if "fragment_description_missing" in high_freq_issues:
+            info("根据历史经验，描述缺失问题频繁，将加强描述生成")
+            self._focus_on_description_quality = True
+
+        if "fragment_no_continuity" in high_freq_issues:
+            info("根据历史经验，连续性注释缺失问题频繁，将自动添加注释")
+            self._focus_on_continuity = True
+
+        # 根据质量等级调整
+        if self.should_use_enhanced_validation():
+            info("启用增强验证模式，将更严格检查分割质量")
+            self._need_extra_validation = True
+
+        # 使用基类方法安全获取统计信息
+        historical_stats = self.current_historical_context.get("historical_stats")
+        if historical_stats and isinstance(historical_stats, dict):
+            avg_fragment_count = historical_stats.get("fragment_count", 0)
+            avg_duration = historical_stats.get("avg_duration", 0)
+            split_ratio = historical_stats.get("ai_split_count", 0) / max(historical_stats.get("fragment_count", 1), 1)
+
+            if avg_fragment_count:
+                debug(f"历史分割统计: 平均片段数={avg_fragment_count}, 平均时长={avg_duration:.1f}s, AI分割比例={split_ratio:.0%}")
+
+            if avg_duration and avg_duration > 4.0:
+                self._focus_on_duration_control = True
+                debug("历史平均时长偏长，将优先使用更精细的分割")
+
+        # 使用基类方法安全获取历史问题
+        historical_issues = self.current_historical_context.get("historical_issues")
+        if historical_issues:
+            debug(f"历史问题数量: {len(historical_issues)}条，将参考避免这些问题")
+
+
+    def video_process(self, shot_sequence: ShotSequence, parsed_script: ParsedScript) -> Optional[FragmentSequence]:
         """视频片段分割"""
         debug("开始切割视频片段")
+
+        # 记录历史上下文信息
+        if self.current_historical_context:
+            debug(f"历史上下文已加载: 常见问题模式={len(self.get_historical_insights().get('common_issues', {}))}种")
+
+        repair_params = self.current_repair_params
 
         # 记录分割尝试
         attempt = len(self.split_history) + 1
         self.split_history.append({"attempt": attempt, "timestamp": time.time()})
 
         try:
-            fragment_sequence = self.splitter.cut(shot_sequence, parsed_script, repair_params)
+            # 调用分割器 - 传递历史上下文
+            fragment_sequence = self.splitter.cut(
+                shot_sequence,
+                parsed_script,
+                repair_params,
+                self.current_historical_context  # 传递历史上下文
+            )
 
             if not fragment_sequence:
                 error("视频片段分割失败")
                 return None
 
-            info(f"视频分割完成，片段数: {len(fragment_sequence.fragments)}")
             total_duration = sum(f.duration for f in fragment_sequence.fragments)
             debug(f"总时长: {total_duration:.1f}秒")
             debug(f"平均时长: {total_duration / len(fragment_sequence.fragments):.1f}秒")
@@ -106,7 +193,7 @@ class VideoSplitterAgent(BaseRepairableAgent[FragmentSequence, ShotSequence]):
             return None
 
     def detect_video_issues(self, fragment_sequence: FragmentSequence,
-                      shot_sequence: ShotSequence) -> List[BasicViolation]:
+                            shot_sequence: ShotSequence) -> List[BasicViolation]:
         """
         检测视频分割中的问题 - 供质量审查节点调用
 

@@ -6,20 +6,20 @@
 @Time: 2026/1/18 14:23
 """
 import time
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from penshot.logger import debug, error, info
 from penshot.neopen.agent.base_models import AgentMode
 from penshot.neopen.agent.base_repairable_agent import BaseRepairableAgent
 from penshot.neopen.agent.prompt_converter.prompt_converter_factory import PromptConverterFactory
 from penshot.neopen.agent.prompt_converter.prompt_converter_models import AIVideoInstructions, AIVideoPrompt
-from penshot.neopen.agent.quality_auditor.quality_auditor_models import BasicViolation, SeverityLevel, IssueType, RuleType, QualityRepairParams
+from penshot.neopen.agent.quality_auditor.quality_auditor_models import BasicViolation, SeverityLevel, IssueType, RuleType
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript
 from penshot.neopen.agent.video_splitter.video_splitter_models import FragmentSequence
 from penshot.neopen.agent.workflow.workflow_models import PipelineNode
 from penshot.neopen.shot_config import ShotConfig
 from penshot.utils.log_utils import print_log_exception
-from penshot.utils.str_count_utils import count_words_full, only_count_en
+from penshot.utils.str_count_utils import only_count_en
 
 
 class PromptConverterAgent(BaseRepairableAgent[AIVideoInstructions, FragmentSequence]):
@@ -45,11 +45,35 @@ class PromptConverterAgent(BaseRepairableAgent[AIVideoInstructions, FragmentSequ
         self.convert_history = []
         self.last_instructions = None
 
-    def process(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript, repair_params: Optional[QualityRepairParams]) -> Optional[AIVideoInstructions]:
-        if repair_params:
-            self.current_repair_params = repair_params
+        # 历史上下文相关变量
+        self._common_issue_patterns: Dict[str, int] = {}
+        self._focus_on_prompt_quality: bool = False
+        self._focus_on_audio_quality: bool = False
+        self._focus_on_style_consistency: bool = False
+        self._need_extra_validation: bool = False
 
-        return self.prompt_process(fragment_sequence, parsed_script, repair_params)
+    def process(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript) -> Optional[AIVideoInstructions]:
+        """
+        处理提示词转换
+
+        直接使用 self.current_repair_params 和 self.current_historical_context
+        """
+        # 使用历史上下文优化策略
+        if self.current_historical_context:
+            debug("使用历史上下文优化提示词转换")
+
+            # 根据历史问题调整转换策略
+            if self._focus_on_prompt_quality:
+                debug("启用提示词质量增强模式")
+            if self._focus_on_audio_quality:
+                debug("启用音频质量增强模式")
+            if self._focus_on_style_consistency:
+                debug("启用风格一致性增强模式")
+
+        return self.prompt_process(
+            fragment_sequence,
+            parsed_script
+        )
 
     def repair_result(self, instructions: AIVideoInstructions, issues: List[BasicViolation],
                       fragment_sequence: FragmentSequence) -> AIVideoInstructions:
@@ -60,23 +84,108 @@ class PromptConverterAgent(BaseRepairableAgent[AIVideoInstructions, FragmentSequ
                       fragment_sequence: FragmentSequence) -> List[BasicViolation]:
         return self.detect_prompt_issues(instructions, fragment_sequence)
 
-    def prompt_process(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript,
-                       repair_params: Optional[QualityRepairParams]) -> Optional[AIVideoInstructions]:
+    def _on_historical_context_applied(self) -> None:
+        """历史上下文应用后的自定义处理"""
+        if not self.current_historical_context:
+            return
+
+        insights = self.get_historical_insights()
+
+        # 使用基类方法获取高频问题
+        high_freq_issues = insights.get("high_freq_issues", {})
+
+        if "prompt_too_long" in high_freq_issues:
+            info("根据历史经验，提示词过长问题频繁，将加强长度控制")
+            self._focus_on_prompt_quality = True
+
+        if "prompt_too_short" in high_freq_issues:
+            info("根据历史经验，提示词过短问题频繁，将加强描述完整性")
+            self._focus_on_prompt_quality = True
+
+        if "prompt_truncated" in high_freq_issues:
+            info("根据历史经验，提示词截断问题频繁，将确保输出完整性")
+            self._focus_on_prompt_quality = True
+
+        if "style_inconsistent" in high_freq_issues:
+            info("根据历史经验，风格不一致问题频繁，将加强风格统一")
+            self._focus_on_style_consistency = True
+
+        if "audio_prompt_missing" in high_freq_issues or "audio_prompt_too_short" in high_freq_issues:
+            info("根据历史经验，音频提示词问题频繁，将加强音频生成质量")
+            self._focus_on_audio_quality = True
+
+        # 根据质量等级调整
+        if self.should_use_enhanced_validation():
+            info("启用增强验证模式，将更严格检查提示词质量")
+            self._need_extra_validation = True
+
+        # 使用基类方法安全获取统计信息
+        historical_stats = self.current_historical_context.get("historical_stats")
+        if historical_stats and isinstance(historical_stats, dict):
+            avg_prompt_length = historical_stats.get("avg_prompt_length", 0)
+            prompt_count = historical_stats.get("prompt_count", 1)
+            audio_count = historical_stats.get("audio_prompt_count", 0)
+            audio_count_ratio = audio_count / max(prompt_count, 1)
+
+            if avg_prompt_length:
+                debug(f"历史转换统计: 平均提示词长度={avg_prompt_length:.0f}, 音频覆盖率={audio_count_ratio:.0%}")
+
+            if avg_prompt_length and avg_prompt_length > self.config.prompt_length_max_threshold * 0.8:
+                self._focus_on_prompt_quality = True
+                debug("历史平均提示词长度偏高，将优先控制长度")
+
+            if audio_count_ratio < 0.5:
+                self._focus_on_audio_quality = True
+                debug("历史音频覆盖率偏低，将加强音频生成")
+
+        # 使用基类方法安全获取成功模式
+        successful_patterns = self.current_historical_context.get("successful_patterns")
+        if successful_patterns:
+            debug(f"已加载 {len(successful_patterns) if isinstance(successful_patterns, list) else 1} 条成功模式")
+
+
+    def prompt_process(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript) -> Optional[AIVideoInstructions]:
         """视频片段转换提示词"""
         debug("开始视频转换提示词")
+
+        historical_context = self.current_historical_context
+        repair_params = self.current_repair_params
+
+        # 记录历史上下文信息
+        if historical_context:
+            debug(f"历史上下文已加载: 常见问题模式={len(historical_context.get('common_issues', []))}种")
+
+            # 使用历史上下文优化解析策略
+            common_issues = historical_context.get("common_issues")
+            if common_issues:
+                debug(f"加载了 {len(common_issues)} 条常见问题模式，用于优化提示词生成")
+
+            historical_stats = historical_context.get("historical_stats")
+            if historical_stats:
+                debug(f"历史转换统计: 平均完整度={historical_stats.get('completeness_score', 0)}")
+
+            successful_patterns = historical_context.get("successful_patterns")
+            if successful_patterns:
+                debug(f"加载了 {len(successful_patterns) if isinstance(successful_patterns, list) else 1} 条成功模式")
 
         # 记录转换尝试
         attempt = len(self.convert_history) + 1
         self.convert_history.append({"attempt": attempt, "timestamp": time.time()})
 
         try:
-            instructions = self.converter.convert(fragment_sequence, parsed_script, repair_params)
+            # 调用转换器 - 传递历史上下文
+            instructions = self.converter.convert(
+                fragment_sequence,
+                parsed_script,
+                repair_params,
+                historical_context  # 传递历史上下文
+            )
 
             if not instructions:
                 error("提示词转换失败")
                 return None
 
-            info(f"提示词转换完成，指令数: {len(instructions.fragments)}")
+            debug(f"提示词转换完成，指令数: {len(instructions.fragments)}")
 
             # 统计提示词长度
             prompt_lengths = [len(f.prompt) for f in instructions.fragments]

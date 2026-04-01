@@ -48,7 +48,7 @@ class HuggingFaceClient(BaseClient):
 
         # 默认配置
         default_kwargs = {
-            "model_name": self.config.model_name or "BAAI/bge-small-zh-v1.5",  # 模型名称
+            "model_name": self.embed_config.model_name or "BAAI/bge-small-zh-v1.5",  # 模型名称
             "model_kwargs": {"device": "cpu"},  # 设备：cpu, cuda, mps
             "encode_kwargs": {
                 "normalize_embeddings": True,  # 归一化嵌入向量

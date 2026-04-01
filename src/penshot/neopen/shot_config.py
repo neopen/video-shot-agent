@@ -13,9 +13,9 @@ from penshot.neopen.client.client_config import AIConfig
 @dataclass
 class ShotConfig(AIConfig):
     """用户请求的参数"""
-    prev_continuity_state = None        # 前一个分镜的连续性状态，用于保持连续性
     enable_llm: bool = True             # 开启 LLM 解析/分镜/审查，否则使用规则解析
-    enable_continuity_check: bool = False   # 开启连续性检查
+    # prev_continuity_state: str = None        # 前一个分镜的连续性状态，用于保持连续性
+    # enable_continuity_check: bool = False   # 开启连续性检查
     # 流程控制
     max_total_loops: int = 20  # 最大总循环次数
     loop_warning_issued: bool = False  # 是否已发出循环警告

@@ -1,10 +1,3 @@
-from __future__ import annotations
-
-from penshot.neopen.task.task_models import TaskStatus
-from penshot.utils.log_utils import print_log_exception
-from penshot.utils.obj_utils import obj_to_dict
-from penshot.utils.redis_utils import RedisClient
-
 """
 @FileName: task_manager.py
 @Description: TaskManager with optional Redis backend.
@@ -16,20 +9,25 @@ from penshot.utils.redis_utils import RedisClient
 @Time: 2026/1/26 16:42
 """
 
+from __future__ import annotations
+
 import copy
 import json
 import uuid
+from collections import OrderedDict
 from dataclasses import is_dataclass
 from datetime import datetime, timezone, timedelta
 from threading import RLock
-from collections import OrderedDict
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from typing import Optional, Dict, Any, List
 
-from penshot.logger import info, error
-
-if TYPE_CHECKING:
-    from penshot.neopen.agent import MultiAgentPipeline
+from penshot.logger import info, error, warning, debug
+# if TYPE_CHECKING:
+from penshot.neopen.agent.workflow.workflow_pipeline import MultiAgentPipeline
 from penshot.neopen.shot_config import ShotConfig
+from penshot.neopen.task.task_models import TaskStatus, TaskStage
+from penshot.utils.log_utils import print_log_exception
+from penshot.utils.obj_utils import obj_to_dict
+from penshot.utils.redis_utils import RedisClient
 
 
 class TaskManager:
@@ -50,7 +48,7 @@ class TaskManager:
         # workflow cache (in-memory) and pipeline factory
         self.workflow_cache: "OrderedDict[str, Any]" = OrderedDict()
         self.max_cache_size = max_cache_size
-        self.task_ttl_seconds = task_ttl_seconds  # 新增
+        self.task_ttl_seconds = task_ttl_seconds
 
         self.pipeline_factory = None
 
@@ -66,8 +64,10 @@ class TaskManager:
         try:
             self.redis = self.redis_client.get_client()
             self.use_redis = True
-        except Exception:
-            # redis not available
+            debug("Redis 客户端初始化成功")
+        except Exception as e:
+            # redis not available - 这是预期的降级行为，使用 warning 级别
+            warning(f"Redis 不可用，将使用内存存储: {e}")
             self.redis = None
             self.use_redis = False
 
@@ -82,19 +82,22 @@ class TaskManager:
         if isinstance(value, datetime):
             try:
                 return value.isoformat()
-            except Exception:
+            except Exception as e:
+                warning(f"日期序列化失败，使用字符串转换: {e}")
                 return str(value)
         if is_dataclass(value):
             try:
                 return {k: self._safe_serialize(v) for k, v in vars(value).items()}
-            except Exception:
+            except Exception as e:
+                error(f"数据类序列化失败: {e}")
                 return str(value)
         if isinstance(value, dict):
             res = {}
             for k, v in value.items():
                 try:
                     key = str(k)
-                except Exception:
+                except Exception as e:
+                    warning(f"字典键序列化失败: {e}")
                     key = json.dumps(k, default=str)
                 res[key] = self._safe_serialize(v)
             return res
@@ -104,7 +107,8 @@ class TaskManager:
             return getattr(value, "value", getattr(value, "name", str(value)))
         try:
             return json.loads(json.dumps(value))
-        except Exception:
+        except Exception as e:
+            debug(f"JSON 序列化失败，转为字符串: {e}")
             return str(value)
 
     def _serialize_config(self, config: Any) -> Dict[str, Any]:
@@ -112,21 +116,23 @@ class TaskManager:
             if config is None:
                 return {}
             return self._safe_serialize(config) or {}
-        except Exception:
+        except Exception as e:
+            error(f"配置序列化失败: {e}")
             return {"raw": str(config)}
 
     def _config_key(self, config: Any) -> str:
         """Generate a stable key for a config (sha256 of JSON)"""
         try:
             payload = json.dumps(self._serialize_config(config), sort_keys=True, ensure_ascii=False)
-        except Exception:
+        except Exception as e:
+            warning(f"生成配置键失败，使用字符串转换: {e}")
             payload = str(config)
         try:
             import hashlib
-
             return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-        except Exception:
+        except Exception as e:
             # fallback to uuid5-based key
+            error(f"SHA256 计算失败，使用 UUID5 降级: {e}")
             return str(uuid.uuid5(uuid.NAMESPACE_DNS, payload))
 
     # ---------------------- redis helpers ----------------------
@@ -169,7 +175,7 @@ class TaskManager:
                 else:
                     self.redis.setex(
                         key,
-                        self.task_ttl_seconds,  # 设置过期时间
+                        self.task_ttl_seconds,
                         json.dumps(obj_to_dict(record), ensure_ascii=False)
                     )
                     self.redis.sadd(self._redis_tasks_set_key(), task_id)
@@ -179,10 +185,12 @@ class TaskManager:
                 # increment metrics in redis
                 try:
                     self.redis.incr(self._redis_metrics_key("created"))
-                except Exception:
-                    pass
+                except Exception as e:
+                    # 指标更新失败不影响主流程，使用 warning 级别
+                    warning(f"Redis 指标更新失败: {e}")
             except Exception as e:
-                print(f"Redis 添加任务失败: {e}")
+                # Redis 操作失败，降级到本地存储 - 这是严重的降级，使用 error 级别
+                error(f"Redis 添加任务失败，降级到本地存储: {e}")
                 print_log_exception()
                 # fallback to local
                 with self._lock:
@@ -211,10 +219,12 @@ class TaskManager:
         key = self._redis_key(task_id)
         raw = self.redis.get(key)
         if not raw:
+            debug(f"Redis 中未找到任务: {task_id}")
             return self._read_record_local(task_id)
         try:
             return json.loads(raw)
-        except Exception:
+        except Exception as e:
+            warning(f"Redis 数据反序列化失败，尝试本地存储: task_id={task_id}, error={e}")
             return self._read_record_local(task_id)
 
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
@@ -227,17 +237,20 @@ class TaskManager:
             key = self._redis_key(task_id)
             raw = self.redis.get(key)
             if not raw:
+                debug(f"更新进度时未找到任务: {task_id}")
                 return
             try:
                 rec = json.loads(raw)
-            except Exception:
+            except Exception as e:
+                warning(f"Redis 数据反序列化失败，跳过进度更新: task_id={task_id}, error={e}")
                 return
             rec["stage"] = stage
             if progress is not None:
                 try:
                     p = float(progress)
                     rec["progress"] = max(0.0, min(100.0, p))
-                except Exception:
+                except Exception as e:
+                    warning(f"进度值无效: task_id={task_id}, progress={progress}, error={e}")
                     pass
             rec["updated_at"] = datetime.now(timezone.utc).isoformat()
             # 更新时刷新过期时间
@@ -245,6 +258,7 @@ class TaskManager:
         else:
             with self._lock:
                 if task_id not in self._local_tasks:
+                    debug(f"本地未找到任务: {task_id}")
                     return
                 if stage is not None:
                     self._local_tasks[task_id]["stage"] = stage
@@ -252,15 +266,234 @@ class TaskManager:
                     try:
                         p = float(progress)
                         self._local_tasks[task_id]["progress"] = max(0.0, min(100.0, p))
-                    except Exception:
+                    except Exception as e:
+                        warning(f"进度值无效: task_id={task_id}, progress={progress}, error={e}")
                         pass
                 self._local_tasks[task_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    def update_task_progress_detail(
+            self,
+            task_id: str,
+            stage: TaskStage,
+            progress: float = None,
+            details: Dict[str, Any] = None
+    ) -> bool:
+        """
+        更新任务详细进度
+
+        Args:
+            task_id: 任务ID
+            stage: 当前阶段
+            progress: 该阶段进度百分比
+            details: 阶段详细信息
+        """
+        # 获取阶段代码（作为字典键）
+        stage_code = stage.code
+
+        if self.use_redis and self.redis:
+            key = self._redis_key(task_id)
+            raw = self.redis.get(key)
+            if not raw:
+                warning(f"更新进度详情时未找到任务: {task_id}")
+                return False
+            try:
+                rec = json.loads(raw)
+            except Exception as e:
+                error(f"Redis 数据反序列化失败: task_id={task_id}, error={e}")
+                return False
+
+            # 确保状态为 PROCESSING（如果不是终态）
+            current_status = rec.get("status")
+            if current_status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value]:
+                rec["status"] = TaskStatus.PROCESSING.value
+
+            # 更新当前阶段
+            rec["current_stage"] = stage_code
+            rec["stage"] = stage_code
+            rec["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+            # 初始化进度详情
+            if "progress_details" not in rec:
+                rec["progress_details"] = {}
+
+            # 更新阶段进度
+            if stage_code not in rec["progress_details"]:
+                rec["progress_details"][stage_code] = {
+                    "name": stage.name,
+                    "progress": 0,
+                    "status": "processing",
+                    "started_at": datetime.now(timezone.utc).isoformat()
+                }
+
+            stage_detail = rec["progress_details"][stage_code]
+            if progress is not None:
+                stage_detail["progress"] = progress
+            if details:
+                stage_detail["details"] = details
+
+            # 计算整体进度
+            try:
+                rec["progress"] = self._calculate_overall_progress(rec["progress_details"])
+            except Exception as e:
+                error(f"计算整体进度失败: task_id={task_id}, error={e}")
+                rec["progress"] = 0
+
+            # 更新到 Redis
+            self.redis.setex(key, self.task_ttl_seconds, json.dumps(rec, ensure_ascii=False))
+            return True
+        else:
+            with self._lock:
+                if task_id not in self._local_tasks:
+                    warning(f"本地未找到任务: {task_id}")
+                    return False
+
+                rec = self._local_tasks[task_id]
+
+                # 确保状态为 PROCESSING
+                current_status = rec.get("status")
+                if current_status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value]:
+                    rec["status"] = TaskStatus.PROCESSING.value
+
+                rec["current_stage"] = stage_code
+                rec["stage"] = stage_code
+                rec["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+                if "progress_details" not in rec:
+                    rec["progress_details"] = {}
+
+                if stage_code not in rec["progress_details"]:
+                    rec["progress_details"][stage_code] = {
+                        "name": stage.name,
+                        "progress": 0,
+                        "status": "processing",
+                        "started_at": datetime.now(timezone.utc).isoformat()
+                    }
+
+                stage_detail = rec["progress_details"][stage_code]
+                if progress is not None:
+                    stage_detail["progress"] = progress
+                if details:
+                    stage_detail["details"] = details
+
+                try:
+                    rec["progress"] = self._calculate_overall_progress(rec["progress_details"])
+                except Exception as e:
+                    error(f"计算整体进度失败: task_id={task_id}, error={e}")
+                    rec["progress"] = 0
+
+                return True
+
+    def complete_stage(
+            self,
+            task_id: str,
+            stage: TaskStage,
+            result: Dict[str, Any] = None
+    ) -> bool:
+        """
+        完成一个阶段
+
+        Args:
+            task_id: 任务ID
+            stage: 完成的阶段
+            result: 阶段结果
+        """
+        if self.use_redis and self.redis:
+            key = self._redis_key(task_id)
+            raw = self.redis.get(key)
+            if not raw:
+                warning(f"完成阶段时未找到任务: {task_id}")
+                return False
+            try:
+                rec = json.loads(raw)
+            except Exception as e:
+                error(f"Redis 数据反序列化失败: task_id={task_id}, error={e}")
+                return False
+
+            if "progress_details" not in rec:
+                rec["progress_details"] = {}
+
+            if stage.code in rec["progress_details"]:
+                rec["progress_details"][stage.code]["progress"] = 100
+                rec["progress_details"][stage.code]["status"] = "completed"
+                rec["progress_details"][stage.code]["completed_at"] = datetime.now(timezone.utc).isoformat()
+            else:
+                debug(f"阶段 {stage.code} 不在进度详情中，跳过完成标记")
+
+            if result:
+                if "stage_results" not in rec:
+                    rec["stage_results"] = {}
+                rec["stage_results"][stage.code] = result
+
+            try:
+                rec["progress"] = self._calculate_overall_progress(rec["progress_details"])
+            except Exception as e:
+                error(f"计算整体进度失败: task_id={task_id}, error={e}")
+                rec["progress"] = rec.get("progress", 0)
+
+            rec["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+            self.redis.setex(key, self.task_ttl_seconds, json.dumps(rec, ensure_ascii=False))
+            return True
+        else:
+            with self._lock:
+                if task_id not in self._local_tasks:
+                    warning(f"本地未找到任务: {task_id}")
+                    return False
+
+                rec = self._local_tasks[task_id]
+
+                if "progress_details" not in rec:
+                    rec["progress_details"] = {}
+
+                if stage.code in rec["progress_details"]:
+                    rec["progress_details"][stage.code]["progress"] = 100
+                    rec["progress_details"][stage.code]["status"] = "completed"
+                    rec["progress_details"][stage.code]["completed_at"] = datetime.now(timezone.utc).isoformat()
+                else:
+                    debug(f"阶段 {stage.code} 不在进度详情中，跳过完成标记")
+
+                if result:
+                    if "stage_results" not in rec:
+                        rec["stage_results"] = {}
+                    rec["stage_results"][stage.code] = result
+
+                try:
+                    rec["progress"] = self._calculate_overall_progress(rec["progress_details"])
+                except Exception as e:
+                    error(f"计算整体进度失败: task_id={task_id}, error={e}")
+                    rec["progress"] = rec.get("progress", 0)
+
+                rec["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+                return True
+
+    def _get_stage_name(self, stage: TaskStage) -> str:
+        """获取阶段名称"""
+        return stage.name
+
+    def _calculate_overall_progress(self, progress_details: Dict) -> float:
+        """计算整体进度"""
+        max_progress = 0
+        for stage_code, detail in progress_details.items():
+            # 根据代码获取阶段枚举
+            stage = TaskStage.from_code(stage_code)
+            if stage:
+                weight = stage.weight
+                if detail.get("status") == "completed":
+                    if weight > max_progress:
+                        max_progress = weight
+                elif detail.get("status") == "processing":
+                    stage_progress = weight + (detail.get("progress", 0) / 100) * 10
+                    if stage_progress > max_progress:
+                        max_progress = stage_progress
+
+        return min(100, max_progress)
 
     def update_task_result(self, task_id: str, partial_result: Dict[str, Any]) -> bool:
         if self.use_redis and self.redis:
             key = self._redis_key(task_id)
             tries = 3
-            for _ in range(tries):
+            for attempt in range(tries):
                 pipe = None
                 try:
                     pipe = self.redis.pipeline()
@@ -270,8 +503,9 @@ class TaskManager:
                         try:
                             if pipe is not None:
                                 pipe.unwatch()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            debug(f"Redis 事务回滚失败: {e}")
+                        warning(f"更新结果时未找到任务: {task_id}")
                         return False
                     rec = json.loads(raw)
                     cur = rec.get("result") or {}
@@ -279,7 +513,8 @@ class TaskManager:
                         cur = {}
                     try:
                         cur.update(partial_result)
-                    except Exception:
+                    except Exception as e:
+                        error(f"结果合并失败: task_id={task_id}, error={e}")
                         cur = partial_result
                     rec["result"] = cur
                     rec["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -287,23 +522,28 @@ class TaskManager:
                     # 更新时刷新过期时间
                     pipe.setex(key, self.task_ttl_seconds, json.dumps(rec, ensure_ascii=False))
                     pipe.execute()
+                    debug(f"任务结果更新成功: {task_id}")
                     return True
-                except Exception:
+                except Exception as e:
+                    error(f"更新任务结果失败 (尝试 {attempt + 1}/{tries}): task_id={task_id}, error={e}")
                     try:
                         if pipe is not None:
                             pipe.reset()
-                    except Exception:
-                        pass
+                    except Exception as reset_err:
+                        debug(f"重置 Redis 连接失败: {reset_err}")
                     continue
+            error(f"更新任务结果最终失败: {task_id}")
             return False
         else:
             with self._lock:
                 if task_id not in self._local_tasks:
+                    warning(f"本地未找到任务: {task_id}")
                     return False
                 cur = self._local_tasks[task_id].get("result") or {}
                 try:
                     cur.update(partial_result)
-                except Exception:
+                except Exception as e:
+                    error(f"本地结果合并失败: task_id={task_id}, error={e}")
                     cur = partial_result
                 self._local_tasks[task_id]["result"] = cur
                 self._local_tasks[task_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -324,6 +564,7 @@ class TaskManager:
             key = self._redis_key(task_id)
             raw = self.redis.get(key)
             if not raw:
+                warning(f"更新批次ID时未找到任务: {task_id}")
                 return False
             try:
                 rec = json.loads(raw)
@@ -331,7 +572,8 @@ class TaskManager:
                 rec["updated_at"] = datetime.now(timezone.utc).isoformat()
                 self.redis.set(key, json.dumps(obj_to_dict(rec), ensure_ascii=False))
                 return True
-            except Exception:
+            except Exception as e:
+                error(f"更新批次ID失败: task_id={task_id}, batch_id={batch_id}, error={e}")
                 return False
         else:
             with self._lock:
@@ -339,6 +581,7 @@ class TaskManager:
                     self._local_tasks[task_id]["batch_id"] = batch_id
                     self._local_tasks[task_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
                     return True
+            warning(f"本地未找到任务: {task_id}")
             return False
 
     def get_tasks_by_batch(self, batch_id: str) -> List[Dict[str, Any]]:
@@ -360,13 +603,15 @@ class TaskManager:
                     task = self.get_task(task_id)
                     if task and task.get("batch_id") == batch_id:
                         tasks.append(task)
+                debug(f"从 Redis 获取到 {len(tasks)} 个批次任务: batch_id={batch_id}")
             except Exception as e:
-                error(f"从 Redis 获取批次任务失败: {e}")
+                error(f"从 Redis 获取批次任务失败: batch_id={batch_id}, error={e}")
         else:
             with self._lock:
                 for task_id, task in self._local_tasks.items():
                     if task.get("batch_id") == batch_id:
                         tasks.append(copy.deepcopy(task))
+                debug(f"从本地获取到 {len(tasks)} 个批次任务: batch_id={batch_id}")
 
         return tasks
 
@@ -375,10 +620,12 @@ class TaskManager:
             key = self._redis_key(task_id)
             raw = self.redis.get(key)
             if not raw:
+                warning(f"完成任务时未找到任务: {task_id}")
                 return
             try:
                 rec = json.loads(raw)
-            except Exception:
+            except Exception as e:
+                error(f"Redis 数据反序列化失败: task_id={task_id}, error={e}")
                 return
             rec["status"] = TaskStatus.SUCCESS if result.get("success", False) else TaskStatus.FAILED
             rec["result"] = result
@@ -390,10 +637,12 @@ class TaskManager:
             try:
                 if result.get("success", False):
                     self.redis.incr(self._redis_metrics_key("completed"))
+                    info(f"任务完成: {task_id}")
                 else:
                     self.redis.incr(self._redis_metrics_key("failed"))
-            except Exception:
-                pass
+                    warning(f"任务失败: {task_id}, error={result.get('error')}")
+            except Exception as e:
+                warning(f"Redis 指标更新失败: {e}")
         else:
             with self._lock:
                 if task_id in self._local_tasks:
@@ -405,20 +654,24 @@ class TaskManager:
                     try:
                         if result.get("success", False):
                             self._metrics["completed"] += 1
+                            info(f"任务完成: {task_id}")
                         else:
                             self._metrics["failed"] += 1
-                    except Exception:
-                        pass
+                            warning(f"任务失败: {task_id}, error={result.get('error')}")
+                    except Exception as e:
+                        error(f"更新本地指标失败: {e}")
 
     def fail_task(self, task_id: str, error_message: str):
         if self.use_redis and self.redis:
             key = self._redis_key(task_id)
             raw = self.redis.get(key)
             if not raw:
+                warning(f"失败任务时未找到任务: {task_id}")
                 return
             try:
                 rec = json.loads(raw)
-            except Exception:
+            except Exception as e:
+                error(f"Redis 数据反序列化失败: task_id={task_id}, error={e}")
                 return
             rec["status"] = TaskStatus.FAILED
             rec["error"] = error_message
@@ -427,8 +680,9 @@ class TaskManager:
             self.redis.setex(key, self.task_ttl_seconds, json.dumps(obj_to_dict(rec), ensure_ascii=False))
             try:
                 self.redis.incr(self._redis_metrics_key("failed"))
-            except Exception:
-                pass
+                warning(f"任务失败: {task_id}, error={error_message}")
+            except Exception as e:
+                warning(f"Redis 指标更新失败: {e}")
         else:
             with self._lock:
                 if task_id in self._local_tasks:
@@ -437,17 +691,23 @@ class TaskManager:
                     self._local_tasks[task_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
                     try:
                         self._metrics["failed"] += 1
-                    except Exception:
-                        pass
+                        warning(f"任务失败: {task_id}, error={error_message}")
+                    except Exception as e:
+                        error(f"更新本地指标失败: {e}")
 
     def list_tasks(self) -> List[str]:
         if self.use_redis and self.redis:
             try:
-                return list(self.redis.smembers(self._redis_tasks_set_key()))
-            except Exception:
+                tasks = list(self.redis.smembers(self._redis_tasks_set_key()))
+                debug(f"从 Redis 获取到 {len(tasks)} 个任务")
+                return tasks
+            except Exception as e:
+                error(f"从 Redis 获取任务列表失败: {e}")
                 return []
         with self._lock:
-            return list(self._local_tasks.keys())
+            tasks = list(self._local_tasks.keys())
+            debug(f"从本地获取到 {len(tasks)} 个任务")
+            return tasks
 
     def delete_task(self, task_id: str, cleanup_workflow: bool = True) -> bool:
         if self.use_redis and self.redis:
@@ -455,14 +715,18 @@ class TaskManager:
             try:
                 self.redis.delete(key)
                 self.redis.srem(self._redis_tasks_set_key(), task_id)
-            except Exception:
+                debug(f"从 Redis 删除任务: {task_id}")
+            except Exception as e:
+                error(f"从 Redis 删除任务失败: task_id={task_id}, error={e}")
                 return False
         else:
             with self._lock:
                 if task_id not in self._local_tasks:
+                    warning(f"删除本地任务时未找到任务: {task_id}")
                     return False
                 self._local_tasks.pop(task_id, None)
                 self._local_raw_configs.pop(task_id, None)
+                debug(f"从本地删除任务: {task_id}")
 
         if cleanup_workflow:
             # remove workflow cache if no other tasks use same config
@@ -486,13 +750,14 @@ class TaskManager:
                                 break
                         if not still_used:
                             self.workflow_cache.pop(key, None)
-            except Exception:
-                pass
+                            debug(f"清理工作流缓存: {key}")
+            except Exception as e:
+                error(f"清理工作流缓存失败: task_id={task_id}, error={e}")
 
         return True
 
     # keep get_workflow behavior similar to previous (in-memory pipeline cache)
-    def get_workflow(self, task_id: Optional[str] = None, config: Optional[Any] = None) -> "Any":
+    def get_workflow(self, task_manager, task_id: Optional[str] = None, config: Optional[Any] = None) -> "Any":
         # prefer local raw config when available
         if task_id is not None and (config is None or isinstance(config, dict)):
             with self._lock:
@@ -503,7 +768,8 @@ class TaskManager:
         # compute cache key (use serialized config JSON as key)
         try:
             payload = json.dumps(self._serialize_config(config), sort_keys=True, ensure_ascii=False)
-        except Exception:
+        except Exception as e:
+            warning(f"生成工作流键失败，使用字符串转换: {e}")
             payload = str(config)
         key = str(uuid.uuid5(uuid.NAMESPACE_DNS, payload))
 
@@ -512,26 +778,30 @@ class TaskManager:
             if pipeline is not None:
                 try:
                     self.workflow_cache.move_to_end(key)
-                except Exception:
-                    pass
+                    debug(f"从缓存获取工作流: {key}")
+                except Exception as e:
+                    warning(f"更新工作流缓存顺序失败: {e}")
                 return pipeline
 
         # create pipeline (use factory if provided)
-        if getattr(self, "pipeline_factory", None) is not None:
-            pipeline = self.pipeline_factory(task_id, config)
-        else:
-            from penshot.neopen.agent import MultiAgentPipeline  # type: ignore
-
-            pipeline = MultiAgentPipeline(task_id, config)
+        try:
+            if getattr(self, "pipeline_factory", None) is not None:
+                pipeline = self.pipeline_factory(task_id, config)
+            else:
+                pipeline = MultiAgentPipeline(task_id, task_id, config, task_manager)
+            info(f"创建新工作流: {key}")
+        except Exception as e:
+            error(f"创建工作流失败: {e}")
+            raise
 
         # insert into LRU cache
         with self._lock:
             if self.max_cache_size > 0 and len(self.workflow_cache) >= self.max_cache_size:
                 try:
                     oldest_key, _ = self.workflow_cache.popitem(last=False)
-                    info(f"Evicted oldest workflow cache key: {oldest_key}")
-                except Exception:
-                    pass
+                    info(f"清理最旧的工作流缓存: {oldest_key}")
+                except Exception as e:
+                    warning(f"清理工作流缓存失败: {e}")
             self.workflow_cache[key] = pipeline
 
         return pipeline
@@ -539,7 +809,9 @@ class TaskManager:
     # ---------------------- utility methods ----------------------
     def clear_workflow_cache(self):
         with self._lock:
+            cache_size = len(self.workflow_cache)
             self.workflow_cache.clear()
+            info(f"清理工作流缓存，共清理 {cache_size} 项")
 
     def get_cached_workflow_keys(self) -> List[str]:
         with self._lock:
@@ -548,13 +820,17 @@ class TaskManager:
     def get_metrics(self) -> Dict[str, int]:
         if self.use_redis and self.redis:
             try:
-                return {
+                metrics = {
                     "created": int(self.redis.get(self._redis_metrics_key("created")) or 0),
                     "completed": int(self.redis.get(self._redis_metrics_key("completed")) or 0),
                     "failed": int(self.redis.get(self._redis_metrics_key("failed")) or 0),
                 }
-            except Exception:
-                return dict(self._metrics)
+                debug(f"从 Redis 获取指标: {metrics}")
+                return metrics
+            except Exception as e:
+                warning(f"从 Redis 获取指标失败，使用本地指标: {e}")
+                with self._lock:
+                    return dict(self._metrics)
         with self._lock:
             return dict(self._metrics)
 
@@ -562,17 +838,25 @@ class TaskManager:
         if not isinstance(size, int) or size < 0:
             raise ValueError("max_cache_size must be a non-negative integer")
         with self._lock:
+            old_size = self.max_cache_size
             self.max_cache_size = size
             try:
                 while self.max_cache_size > 0 and len(self.workflow_cache) > self.max_cache_size:
                     self.workflow_cache.popitem(last=False)
-            except Exception:
-                pass
+                info(f"更新最大缓存大小: {old_size} -> {size}")
+            except Exception as e:
+                error(f"清理缓存失败: {e}")
 
     def export_task_snapshot(self, task_id: str) -> Optional[Dict[str, Any]]:
         if self.use_redis and self.redis:
-            return self._read_record_redis(task_id)
-        return self._read_record_local(task_id)
+            snapshot = self._read_record_redis(task_id)
+            if snapshot:
+                debug(f"导出任务快照: {task_id}")
+            return snapshot
+        snapshot = self._read_record_local(task_id)
+        if snapshot:
+            debug(f"导出任务快照: {task_id}")
+        return snapshot
 
     def import_task_snapshot(self, snapshot: Dict[str, Any]) -> str:
         task_id = snapshot.get("task_id") or str(uuid.uuid4())
@@ -581,7 +865,9 @@ class TaskManager:
             try:
                 self.redis.set(key, json.dumps(snapshot, ensure_ascii=False))
                 self.redis.sadd(self._redis_tasks_set_key(), task_id)
-            except Exception:
+                info(f"导入任务快照到 Redis: {task_id}")
+            except Exception as e:
+                error(f"导入任务快照到 Redis 失败，降级到本地: {e}")
                 # fallback to local
                 with self._lock:
                     self._local_tasks[task_id] = snapshot
@@ -590,6 +876,7 @@ class TaskManager:
             with self._lock:
                 self._local_tasks[task_id] = snapshot
                 self._local_raw_configs[task_id] = None
+                info(f"导入任务快照到本地: {task_id}")
         return task_id
 
     def shutdown(self, close_pipelines: bool = True):
@@ -607,11 +894,14 @@ class TaskManager:
                     if callable(meth):
                         try:
                             meth()
-                        except Exception:
-                            pass
+                            debug(f"关闭工作流: {k}")
+                        except Exception as e:
+                            error(f"关闭工作流失败: {k}, error={e}")
                         break
         with self._lock:
+            cache_size = len(self.workflow_cache)
             self.workflow_cache.clear()
+            info(f"关闭 TaskManager，清理 {cache_size} 个工作流缓存")
 
     def set_task_callback(self, task_id: str, callback_url: str) -> bool:
         """Set or update the callback URL associated with a task.
@@ -623,10 +913,12 @@ class TaskManager:
             key = self._redis_key(task_id)
             raw = self.redis.get(key)
             if not raw:
+                warning(f"设置回调时未找到任务: {task_id}")
                 return False
             try:
                 rec = json.loads(raw)
-            except Exception:
+            except Exception as e:
+                error(f"Redis 数据反序列化失败: task_id={task_id}, error={e}")
                 return False
             rec.setdefault("callbacks", [])
             # replace callbacks with single callback
@@ -635,17 +927,21 @@ class TaskManager:
             rec["updated_at"] = datetime.now(timezone.utc).isoformat()
             try:
                 self.redis.set(key, json.dumps(obj_to_dict(rec), ensure_ascii=False))
+                info(f"设置任务回调: {task_id} -> {callback_url}")
                 return True
-            except Exception:
+            except Exception as e:
+                error(f"保存回调配置失败: task_id={task_id}, error={e}")
                 return False
         else:
             with self._lock:
                 if task_id not in self._local_tasks:
+                    warning(f"设置回调时本地未找到任务: {task_id}")
                     return False
                 self._local_tasks[task_id].setdefault("callbacks", [])
                 self._local_tasks[task_id]["callbacks"] = [callback_url]
                 self._local_tasks[task_id]["callback_url"] = callback_url
                 self._local_tasks[task_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
+                info(f"设置本地任务回调: {task_id} -> {callback_url}")
                 return True
 
     #     ============================ 恢复任务 ================================
@@ -666,6 +962,7 @@ class TaskManager:
             try:
                 # 从 Redis 获取所有任务ID
                 task_ids = self.list_tasks()
+                debug(f"检查 {len(task_ids)} 个任务是否有未完成状态")
                 for task_id in task_ids:
                     task = self.get_task(task_id)
                     if task:
@@ -684,6 +981,9 @@ class TaskManager:
                                     # 只保留两小时内的任务
                                     if created_at_dt >= cutoff_time:
                                         pending_tasks.append(task)
+                                        debug(f"找到未完成任务: {task_id}, 创建时间: {created_at}")
+                                    else:
+                                        debug(f"跳过过期任务: {task_id}, 创建时间: {created_at}")
                                 except Exception as e:
                                     error(f"解析任务创建时间失败: {task_id}, 错误: {e}")
                                     # 时间解析失败的任务也加入，但记录警告
@@ -714,6 +1014,7 @@ class TaskManager:
                             # 没有创建时间的任务也加入
                             pending_tasks.append(copy.deepcopy(task))
 
+        info(f"获取到 {len(pending_tasks)} 个未完成任务")
         return pending_tasks
 
     def get_pending_tasks_with_filter(
@@ -748,6 +1049,7 @@ class TaskManager:
                             created_at = task.get("created_at")
                             if self._is_task_within_age(created_at, cutoff_time):
                                 filtered_tasks.append(task)
+                debug(f"过滤后得到 {len(filtered_tasks)} 个任务")
             except Exception as e:
                 error(f"获取任务失败: {e}")
         else:
@@ -773,7 +1075,8 @@ class TaskManager:
                 created_at_dt = created_at
 
             return created_at_dt >= cutoff_time
-        except Exception:
+        except Exception as e:
+            warning(f"时间解析失败，默认恢复: {e}")
             return True  # 时间解析失败的任务默认恢复
 
     def recover_all_pending_tasks(self, max_age_hours: int = 2) -> List[str]:
@@ -795,12 +1098,14 @@ class TaskManager:
                 recovered_ids.append(task_id)
                 info(f"恢复任务: {task_id}, 创建时间: {task.get('created_at')}")
 
+        info(f"成功恢复 {len(recovered_ids)}/{len(pending_tasks)} 个任务")
         return recovered_ids
 
     def recover_task(self, task_id: str) -> bool:
         """恢复单个任务（将状态重置为 PENDING）"""
         task = self.get_task(task_id)
         if not task:
+            warning(f"恢复任务失败: 任务不存在 {task_id}")
             return False
 
         # 只恢复未完成的任务
@@ -818,9 +1123,11 @@ class TaskManager:
                         rec.pop("completed_at", None)
                         # 恢复时刷新过期时间
                         self.redis.setex(key, self.task_ttl_seconds, json.dumps(obj_to_dict(rec), ensure_ascii=False))
+                        debug(f"Redis 任务恢复成功: {task_id}")
                         return True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        error(f"Redis 任务恢复失败: {task_id}, error={e}")
+                        return False
             else:
                 with self._lock:
                     if task_id in self._local_tasks:
@@ -829,10 +1136,50 @@ class TaskManager:
                         self._local_tasks[task_id]["progress"] = 0
                         self._local_tasks[task_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
                         self._local_tasks[task_id].pop("completed_at", None)
+                        debug(f"本地任务恢复成功: {task_id}")
                         return True
 
         return False
-#     ============================ 恢复任务 ================================
 
+    #     ============================ 恢复任务 ================================
+
+    # task_manager.py - 添加 update_task_status 方法
+
+    def update_task_status(self, task_id: str, status: TaskStatus) -> bool:
+        """
+        更新任务状态
+
+        Args:
+            task_id: 任务ID
+            status: 新状态
+        """
+        if self.use_redis and self.redis:
+            key = self._redis_key(task_id)
+            raw = self.redis.get(key)
+            if not raw:
+                warning(f"更新状态时未找到任务: {task_id}")
+                return False
+            try:
+                rec = json.loads(raw)
+            except Exception as e:
+                error(f"Redis 数据反序列化失败: task_id={task_id}, error={e}")
+                return False
+
+            rec["status"] = status.value if hasattr(status, 'value') else status
+            rec["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+            self.redis.setex(key, self.task_ttl_seconds, json.dumps(rec, ensure_ascii=False))
+            debug(f"任务状态更新: {task_id} -> {status}")
+            return True
+        else:
+            with self._lock:
+                if task_id not in self._local_tasks:
+                    warning(f"本地未找到任务: {task_id}")
+                    return False
+
+                self._local_tasks[task_id]["status"] = status.value if hasattr(status, 'value') else status
+                self._local_tasks[task_id]["updated_at"] = datetime.now(timezone.utc).isoformat()
+                debug(f"本地任务状态更新: {task_id} -> {status}")
+                return True
 
 # end of TaskManager

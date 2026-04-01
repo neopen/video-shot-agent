@@ -7,10 +7,13 @@
 """
 from dataclasses import dataclass
 from enum import Enum, unique
-from random import Random
-from typing import Optional, List
+from typing import Optional
 
-from pydantic import SecretStr
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models import BaseLanguageModel
+from pydantic import Field
+
+from penshot.config.config_models import LLMBaseConfig, EmbeddingBaseConfig
 
 
 @unique
@@ -75,35 +78,26 @@ def detect_ai_provider_by_url(base_url: str) -> ClientType:
 
 @dataclass
 class AIConfig:
-    """AI配置"""
-    model_name: str = None  # 或 "claude-3", "deepseek-chat", "gpt-4"
-    base_url: str = None  # 用于本地部署或特定API端点
-    api_key: Optional[SecretStr] = None
-    temperature: float = 0.1
-    max_tokens: int = 10000
-    max_retries: int = 3  # 最大重试次数
-    seed: int = Random().randint(1000, 999999999999999)
-    response_format: str = "json"  # 响应格式，默认为JSON
-    timeout: int = 60  # 请求超时时间，单位秒
-    enable_cot: bool = True  # 启用思维链推理
-    include_visual_hints: bool = True  # 包含视觉生成提示
+    llm: LLMBaseConfig = LLMBaseConfig()
+    embed: EmbeddingBaseConfig = EmbeddingBaseConfig()
 
-    retry_delay: float = 1.0  # 重试延迟
-    top_p: float = 1.0  # 核采样概率
-    frequency_penalty: float = 0.0  # 频率惩罚
-    presence_penalty: float = 0.0  # 存在惩罚
+    # 业务开关
+    cinematic_knowledge: bool = Field(default=True, description="注入影视领域知识")
+    pacing_principles: bool = Field(default=True, description="启用节奏控制原则")
 
-    streaming: bool = False  # 是否流式响应
-    function_call: str = None  # 函数调用模式
-    functions: List = None  # 可用函数列表
+    #
+    def has_llm_config(self):
+        return self.llm and self.llm.model_name and self.llm.base_url
 
-    # 嵌入向量维度
-    dimensions: int = 1024
+    def has_embed_config(self):
+        return self.embed and self.embed.model_name and self.embed.base_url
 
-    # 专业领域知识注入
-    cinematic_knowledge: bool = True
-    pacing_principles: bool = True
-
-    def get_llm_by_config(self):
+    # LLM
+    def get_llm_by_config(self) -> Optional[BaseLanguageModel]:
         from penshot.neopen.client.client_factory import get_llm_client, get_default_llm
-        return get_llm_client(self) if self.model_name and self.base_url else get_default_llm()
+        return get_llm_client(self) if self.has_llm_config() else get_default_llm()
+
+    # Embeddings
+    def get_embed_by_config(self) -> Optional[Embeddings]:
+        from penshot.neopen.client.client_factory import get_embedding_client, get_default_embedding
+        return get_embedding_client(self) if self.has_embed_config() else get_default_embedding()

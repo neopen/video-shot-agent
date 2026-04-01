@@ -6,7 +6,7 @@
 @Time: 2026/1/26 23:36
 """
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from penshot.neopen.agent.prompt_converter.prompt_converter_models import AIVideoInstructions
 from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityRepairParams
@@ -28,7 +28,8 @@ class BasePromptConverter(ABC):
         info(f"初始化提示词转换器: {self.__class__.__name__}")
 
     @abstractmethod
-    def convert(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript, repair_params: Optional[QualityRepairParams]) -> AIVideoInstructions:
+    def convert(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript,
+                repair_params: Optional[QualityRepairParams], historical_context: Optional[Dict[str, Any]]) -> AIVideoInstructions:
         """将片段序列转换为AI提示词（抽象方法）"""
         pass
 

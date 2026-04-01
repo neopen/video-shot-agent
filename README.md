@@ -4,27 +4,20 @@
 
 一个基于多智能体协作的剧本分镜系统，能够将多种格式的剧本拆分为AI可生成的短视频脚本单元，输出高质量分镜片段描述，并保证叙事连续性。支持多种AI提供商，具有强大的可扩展性和易用性。
 
-以 LangChain + LangGraph 实现通过 LLM 把任意格式剧本，解析转换为符合模型的 “Text to Video” 脚本片段提示词（5-20秒），且会保持片段间角色剧情的连贯性和一致性，可直接应用于Sora、Veo、Runway、Pika、Kling、通义万相、Stable Video Diffusion等模型。 支持 MCP、REST API 协议和 Function Call，可通过 A2A、LangGraph、API、Python 库等方式集成使用。
+> 以 LangChain + LangGraph 实现通过 LLM 把任意格式剧本，解析转换为符合模型的 “Text to Video” 脚本片段提示词（5-n+5秒），且会保持片段间角色剧情的连贯性和一致性，可直接应用于Sora、Veo、Runway、Pika、Kling、通义万相、Stable Video Diffusion等模型。 支持 MCP、REST API 协议和 Function Call，可通过 A2A、LangGraph、API、Python 库等方式集成使用。
 
-**==自然语言处理（NLP）应用场景的典型项目==**
+**创作流程**：客户端  → LLM 剧本创作  →  <u>***[剧本解析](https://github.com/neopen/video-shot-agent)（分镜转码）***</u> → DM 视频生成（文生视频） →  视频合成渲染（FFmpeg）
+
+**该项目是典型的自然语言处理（NLP）应用场景**
 
 > - **需求描述**：假如我有一段预估两分钟左右的剧本，想通过AI模型生成对应的短视频。
 >
 > - **技术受限**：目前的各种模型仅支持一次生成5-10秒长度的视频，想要生成两分钟长度的视频，只能通过“拼接”的方式，将多个5秒的片段合成为一个视频。
->
 > - **任务&挑战点**：要实现视频拼接，第一步就需要拆分原剧本，拆分后的剧本尽量接近5-10秒时长（取决于模型），且每个视频片段还必须要保持连贯性，不然生成的视频片段合成后会导致场景、动作、人物等衔接不上。
->
->   且剧情中的动作、语速等会影响时长，所以需要考虑多种情景，比如：老人动作慢、生气怒吼时语速会较快、跑比走要快等等。
->
->   这便是本智能体需要完成的任务，用户只需要给出剧本，而后根据各种技术拆解，最后将拆解完成的剧本片段返回，用户只需要将其交给模型（Runway、Pika、Sora、Wan、Stable Video等）生成即可，最后再利用相关技术将片段合成为完整视频。
-
-**创作流程**：客户端  → LLM 剧本创作  →  <u>***剧本解析（分镜转码）***</u> → DM 视频生成（文生视频） →  视频合成渲染（FFmpeg）
-
-**注意**：本智能体不参与剧本创作，不会调用模型生成视频，亦不会合成视频，以上流程中标注处就是本智能体任务（未来版本会支持qita）。
 
 
 
-详细设计参照文档：[剧本分镜智能体架构设计与实现（v1.x） | 余一叶知秋尽](https://pengline.github.io/2026/02/7e6cd67dd5ee45248f2276ac145555f5/)
+架构及详细设计，参照博客文档：[剧本分镜智能体架构设计与实现（v1.0）](https://pengline.github.io/2026/02/7e6cd67dd5ee45248f2276ac145555f5/)
 
 
 
@@ -41,6 +34,19 @@
 - **可配置的生成参数**：支持温度、时长、模型选择等多维度参数配置
 - **错误处理与重试机制**：自动重试失败的生成任务，确保高成功率
 - **结果可追溯**：每个分镜片段都可追溯到原剧本位置，便于验证和调整
+
+## 系统说明
+
+1. **依赖外部API**：LLM版本需要稳定的网络连接
+2. **AI模型限制**：生成的视频质量受限于AI视频模型能力
+3. **处理长剧本**：长剧本可能需要分段处理
+4. **多语言支持**：主要针对中文优化，其他语言效果待测试
+5. **生成时长不确定**：AI生成的片段时长可能与预估不完全一致
+6. **连续性挑战**：保持分镜间的连续性可能存在技术难点
+7. **用户反馈机制**：当前版本不支持从用户反馈中学习优化
+8. **错误处理**：异常情况可能导致生成失败
+9. **声音同步**：实现声音与画面的一致性挑战，口型同步、环境音设计等需要进一步优化
+10. **专业级分镜**：达到专业导演水准需要持续迭代和优化
 
 
 
@@ -62,18 +68,17 @@ pip install -e .
 # 脚本会自动创建虚拟环境、安装依赖并启动服务，若失败，可手动安装
 python main.py
 
-
-######### 方式2：手动安装 #########
-python -m venv .venv
-
-.venv\Scripts\activate      # 激活虚拟环境 (Windows)
-source .venv/bin/activate   # 或者 (Linux/Mac)
-
+######### 方式2：手动安装（uv） #########
+uv venv --python 3.11
+# 激活虚拟环境 (Linux/macOS)
+source .venv/bin/activate
+# 激活虚拟环境 (Windows)
+.venv\Scripts\activate
 # 安装依赖
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 ```
 
-### 2. 配置设置
+### 2. 环境配置
 
 复制配置文件并设置环境变量：
 
@@ -84,26 +89,17 @@ cp .env.example .env
 编辑 `.env` 文件，配置必要的参数：
 
 ```properties
-# ================= API配置 =================
-#  服务器主机，支持HOST环境变量
-API__HOST=localhost
-#  服务器端口，支持PORT环境变量
-API__PORT=8000
-
 ########################## LLM 模型配置 #########################
 # 系统支持的厂商（openai, qwen, deepseek, ollama）
-
-# ================= LLM默认配置 =================
-# LLM 厂商 API
 LLM__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
-# LLM 厂商 KAY
 LLM__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-# LLM 厂商 模型
 LLM__DEFAULT__MODEL_NAME=qwen-plus
-# 默认API超时时间（秒）
-LLM__DEFAULT__TIMEOUT=60
-# 最大生成令牌数
-LLM__DEFAULT__MAX_TOKENS=4096
+
+########################## 嵌入模型配置 #########################
+# 系统支持的厂商（openai, qwen, HuggingFace, ollama）
+EMBED__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
+EMBED__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+EMBED__DEFAULT__MODEL_NAME=text-embedding-v4
 ```
 
 ### 3. 启动应用
@@ -112,7 +108,7 @@ LLM__DEFAULT__MAX_TOKENS=4096
 python main.py
 ```
 
-> 应用将在 `http://0.0.0.0:8000` 启动，提供API接口服务。
+> 应用将在 `http://0.0.0.0:8000` 启动，提供API 接口服务。
 >
 
 ### 4. 提交任务
@@ -165,35 +161,10 @@ curl --location --request GET 'http://localhost:8000/api/v1/result/HL20260306193
         "model_type": "AudioLDM_3",
         "voice_type": "narration",
         "audio_style": "cinematic",
-        "voice_character": null,
         "voice_description": "ambient sound design only, no voice, pure atmospheric field recording style",
-        "pitch_shift": 0.0,
-        "emotion": "neutral",
-        "previous_audio_id": "audio_014"
+        "emotion": "neutral"
       }
-    },
-    {
-      "fragment_id": "frag_002",
-      "prompt": "medium shot, cinematic lighting, Lin Ran curled up on a light gray fabric sofa, wrapped in a creamy off-white vintage wool blanket — thick, coarse-knit, slightly yellowed and pilled at edges, showing visible wear; she wears a neutral-toned (light gray/mushroom beige) soft cotton long-sleeve top, loose fit, subtle collar pleats, no jewelry or decoration; her expression is exhausted yet alert, eyes slightly red-rimmed, quiet emotional tension; background: modern small-city apartment living room — light gray fabric sofa, warm-toned wooden coffee table, vintage wall clock frozen at 11:00, half-drawn curtains revealing blurred neon lights and rain-streaked window; muted black-and-white old film playing silently on TV screen; ambient low-frequency rain, faint TV static hum, restrained vocal dynamic range\n\n中景，电影感布光：林然蜷坐于米灰布艺沙发中，裹着米白色旧羊毛毯——厚实粗纺、局部泛黄起球、边缘磨损，具明显生活使用痕迹；身穿中性灰/米白色素色棉质长袖上衣，宽松剪裁，领口微褶，无装饰；神情疲惫而警觉，眼眶微红，情绪张力内敛；背景为现代都市小户型客厅：米灰布艺沙发、暖调原木茶几、静止于11点的老式挂钟、半掩窗帘映出窗外模糊霓虹与雨痕；电视静音播放黑白老电影；环境音为低频雨声基底 + 微弱电视底噪 + 高度克制的人声动态范围",
-      "negative_prompt": "modern fashion clothing, bright colors, glossy textures, sharp focus on face only, text overlays, logos, cartoon style, anime, photorealistic skin imperfections, motion blur, shaky cam, high saturation, studio lighting, smiling, energetic pose, multiple people, clean unused objects",
-      "duration": 3.0,
-      "model": "runway_gen2",
-      "style": "cinematic, realistic, muted color palette, shallow depth of field, Kodak Portra 400 film grain, emotionally restrained tone",
-      "requires_special_attention": false,
-      "audio_prompt": {
-        "audio_id": "audio_002",
-        "prompt": "ambient low-frequency rainfall (intensity 0.9), distant faint television white noise (black-and-white film static), near-silence with subtle breath and micro-movement cues, highly compressed vocal dynamic range, no dialogue, immersive domestic stillness\n\n低频雨声（强度0.9）、远处微弱电视底噪（黑白电影静电声）、近乎寂静中夹杂细微呼吸与身体微动声、人声动态范围高度压缩、无台词、沉浸式居家静默氛围",
-        "negative_prompt": "dialogue, music, footsteps, door sounds, phone ring, laughter, wind, thunder, abrupt transients, high-frequency hiss, stereo panning effects",
-        "model_type": "AudioLDM_3",
-        "voice_type": "narration",
-        "audio_style": "cinematic",
-        "voice_character": null,
-        "voice_description": "no voice, pure environmental atmosphere with ultra-low dynamic range and tactile silence",
-        "pitch_shift": 0.0,
-        "emotion": "neutral",
-        "previous_audio_id": "audio_001"
-      }
-    },
+    }，
     ......
   ]
 }
@@ -201,7 +172,7 @@ curl --location --request GET 'http://localhost:8000/api/v1/result/HL20260306193
 
 
 
-## 智能体集成示例
+## 使用方法
 ### 环境准备
 
 **安装依赖**：
@@ -209,34 +180,31 @@ curl --location --request GET 'http://localhost:8000/api/v1/result/HL20260306193
 ```sh
 # 直接安装
 pip install penshot
-# 或者 pip install https://github.com/neopen/video-shot-agent/releases/download/v0.2.1/penshot-0.2.1-py3-none-any.whl
 
 # 内部默认安装使用 ollama，如果要使用其他平台，需要安装对应的LLM包
 # pip install langchain-openai	使用 openai 或 deepseek
 # pip install dashscope			使用千问
 ```
 
-**环境配置**：
-
-同以上配置
+**配置环境**：
 
 > 1. 复制示例文件：`cp .env.example .env`
 >
-> 2. 编辑 .env 文件，填入真实配置
+> 2. 编辑 .env 文件，填入配置
 >
 > ```properties
 > # ================= LLM默认配置 =================
+> # 系统支持的厂商（openai, qwen, deepseek, ollama）
 > LLM__DEFAULT__BASE_URL=https://api.openai.com/v1
 > LLM__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 > LLM__DEFAULT__MODEL_NAME=gpt-4-turbo-preview
 > LLM__DEFAULT__TIMEOUT=30
-> LLM__DEFAULT__MAX_TOKENS=4000
 > 
-> # ================= LLM备用配置 =================
-> LLM__FALLBACK__BASE_URL=http://localhost:11434
-> LLM__FALLBACK__MODEL_NAME=qwen3:4b
-> LLM__FALLBACK__TIMEOUT=300
-> LLM__FALLBACK__MAX_TOKENS=5000
+> # ================ 嵌入模型默认配置 ================
+> # 系统支持的厂商（openai, qwen, HuggingFace, ollama）
+> EMBED__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
+> EMBED__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+> EMBED__DEFAULT__MODEL_NAME=text-embedding-v4
 > ```
 
 
@@ -244,232 +212,166 @@ pip install penshot
 ### 1. 作为Python库使用
 
 ```python
-from penshot.api import PenshotFunction
-from penshot.neopen import ShotConfig
-from penshot.neopen.shot_language import Language
+from penshot.api import create_penshot_agent
 
-async def basic_usage():
-    """基础用法示例"""
-    print("=== 基础用法示例 ===")
+penshot = create_penshot_agent(max_concurrent=5)
 
-    # 创建智能体实例（可配置并发数）
-    agent = PenshotFunction(language=Language.ZH, max_concurrent=5)
+script = """
+早晨，一个女孩在咖啡馆读书，阳光透过窗户...
+"""
 
-    script = """
-    场景：现代办公室
-    时间：下午3点
-    人物：小李（程序员）
-    动作：小李正在写代码，突然接到电话，表情惊讶
-    """
+# 异步提交任务
+task_id = penshot.breakdown_script_async(
+    script,
+    callback=lambda r: print(f"回调: 任务 {r.task_id} 完成")
+)
 
-    # 同步调用（等待完成）
-    result = agent.breakdown_script(script)
+# 查询状态
+status = penshot.get_task_status(task_id)
+print(f"初始状态: {status.get('status')}")
 
-    print(f"任务ID: {result.task_id}")
-    print(f"成功: {result.success}, 状态: {result.status}")
+# 等待结果
+result = await penshot.wait_for_result_async(task_id)
 
-    if result.success:
-        data = result.data or {}
-        instructions = data.get("instructions", {})
-        shots = instructions.get("fragments", [])
-        project_info = instructions.get("project_info", {})
-
-        print(f"镜头数量: {project_info.get('total_fragments', len(shots))}")
-        print(f"总时长: {project_info.get('total_duration', 0):.1f}秒")
-
-        # 显示前3个镜头
-        for i, shot in enumerate(shots[:3], 1):
-            print(f" 片段提示词 {i}: {shot.get('prompt')[:50]}...")
-
-
-async def async_usage():
-    """异步用法示例"""
-    print("\n=== 异步用法示例 ===")
-
-    agent = PenshotFunction(language=Language.ZH, max_concurrent=5)
-
-    script = """
-    早晨，一个女孩在咖啡馆读书，阳光透过窗户...
-    """
-
-    # 异步提交任务
-    task_id = agent.breakdown_script_async(
-        script,
-        callback=lambda r: print(f"回调: 任务 {r.task_id} 完成")
-    )
-
-    print(f"任务已提交: {task_id}")
-
-    # 查询状态
-    status = agent.get_task_status(task_id)
-    print(f"初始状态: {status.get('status')}")
-
-    # 等待结果
-    result = await agent.wait_for_result_async(task_id)
-
-    print(f"最终结果: 成功={result.success}, 状态={result.status}")
+print(f"最终结果: 成功={result.success}, 状态={result.status}")
 ```
+
+示例代码：[video-shot-agent/example/direct_usage.py at main · neopen/video-shot-agent](https://github.com/neopen/video-shot-agent/blob/main/example/direct_usage.py)
+
+
 
 ### 2. 集成到Web应用（API）
 
 可以通过 HTTP API 将剧本分镜智能体集成到各种 Web 应用中：
 
 ```python
-from penshot.api import PenshotFunction
-from penshot.neopen import ShotConfig
-from penshot.neopen.shot_language import Language
-from penshot.neopen.task.task_models import TaskStatus
+from penshot.api import create_penshot_agent
+from penshot.neopen.task import TaskStatus
 
-def create_web_app(
-        config: Optional[ShotConfig] = None,
-        enable_cors: bool = True
-) -> FastAPI:
+app = FastAPI(
+    title="Penshot 分镜生成 API",
+    description="智能分镜视频生成服务",
+    version="0.1.0"
+)
+
+# 初始化服务
+penshot = create_penshot_agent(max_concurrent=5)
+
+@app.post("/api/generate", response_model=TaskResponse, tags=["Storyboard"])
+async def generate_storyboard(request: ScriptRequest):
     """
-    创建 Web 应用
-
-    Args:
-        config: 全局配置
-        enable_cors: 是否启用 CORS
-
-    Returns:
-        FastAPI 应用实例
+    生成视频分镜（异步）
     """
+    try:
+        # 异步模式
+        task_id = penshot.breakdown_script_async(script_text=request.script_text)
 
-    app = FastAPI(
-        title="Penshot 分镜生成 API",
-        description="智能分镜视频生成服务",
-        version="0.1.0",
-        docs_url="/docs",
-        redoc_url="/redoc"
+        return TaskResponse(
+            task_id=task_id,
+            status=TaskStatus.PENDING,
+            message="任务已提交，请使用 /api/status/{task_id} 查询状态",
+            created_at=datetime.now(timezone.utc)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"生成失败: {str(e)}")
+
+@app.get("/api/result/{task_id}", response_model=TaskResultResponse, tags=["Task"])
+async def get_task_result(task_id: str):
+    """
+    获取任务结果
+    """
+    result = penshot.get_task_result(task_id)
+
+    if not result:
+        raise HTTPException(status_code=404, detail=f"任务不存在或未完成: {task_id}")
+
+    return TaskResultResponse(
+        task_id=result.task_id,
+        success=result.success,
+        status=result.status,
+        data=result.data,
+        error=result.error,
+        processing_time_ms=result.processing_time_ms
     )
-
-    # 初始化服务
-    config = config or ShotConfig()
-    penshot = PenshotFunction(config=config)
-
-    # 启用 CORS
-    if enable_cors:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-
-    @app.post("/api/generate", response_model=TaskResponse, tags=["Storyboard"])
-    async def generate_storyboard(
-            request: ScriptRequest
-    ):
-        """
-        生成视频分镜（异步）
-
-        提交剧本进行分镜生成，立即返回 task_id
-        """
-        try:
-            language = Language.ZH if request.language == "zh" else Language.EN
-
-            # 确定任务ID
-            task_id = request.task_id
-
-            if request.wait:
-                # 同步模式
-                result = penshot.breakdown_script(
-                    script_text=request.script_text,
-                    task_id=task_id,
-                    language=language,
-                    wait_timeout=request.timeout
-                )
-
-                return TaskResponse(
-                    task_id=result.task_id,
-                    status=result.status,
-                    message="同步处理完成" if result.success else f"处理失败: {result.error}",
-                    created_at=datetime.now(timezone.utc)
-                )
-            else:
-                # 异步模式
-                task_id = penshot.breakdown_script_async(
-                    script_text=request.script_text,
-                    task_id=task_id,
-                    language=language
-                )
-
-                return TaskResponse(
-                    task_id=task_id,
-                    status=TaskStatus.PENDING,
-                    message="任务已提交，请使用 /api/status/{task_id} 查询状态",
-                    created_at=datetime.now(timezone.utc)
-                )
-
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"生成失败: {str(e)}")
-            
-    @app.get("/api/result/{task_id}", response_model=TaskResultResponse, tags=["Task"])
-    async def get_task_result(task_id: str):
-        """
-        获取任务结果
-
-        - **task_id**: 任务ID
-        """
-        result = penshot.get_task_result(task_id)
-
-        if not result:
-            raise HTTPException(status_code=404, detail=f"任务不存在或未完成: {task_id}")
-
-        return TaskResultResponse(
-            task_id=result.task_id,
-            success=result.success,
-            status=result.status,
-            data=result.data,
-            error=result.error,
-            processing_time_ms=result.processing_time_ms
-        )
 ```
 
+示例代码：[video-shot-agent/example/web_app.py at main · neopen/video-shot-agent](https://github.com/neopen/video-shot-agent/blob/main/example/web_app.py)
 
 
-### 3. 集成到LangGraph节点
+
+### 3. 集成到 LangGraph 节点
 
 可以将剧本分镜智能体作为 LangGraph 工作流中的一个节点。
 
-使用方式：[剧本分镜智能体架构设计与实现 | 集成到 LangGraph 节点](https://pengline.github.io/2026/02/7e6cd67dd5ee45248f2276ac145555f5/)
+示例代码：[video-shot-agent/example/langgraph_integration.py at main · neopen/video-shot-agent](https://github.com/neopen/video-shot-agent/blob/main/example/langgraph_integration.py)
 
 
 
-### 4. 集成到A2A系统
+### 4. 集成到 A2A 系统
 
-将剧本分镜智能体集成到Agent-to-Agent协作系统中。
+将剧本分镜智能体集成到 Agent-to-Agent 协作系统中。如：上游是剧本创作智能体，下游是 文生视频+剪辑 智能体。
 
-如：上游是剧本创作智能体，下游是 文生视频+剪辑 智能。
+示例代码：[video-shot-agent/example/a2a_integration.py at main · neopen/video-shot-agent](https://github.com/neopen/video-shot-agent/blob/main/example/a2a_integration.py)
 
-使用方式：[剧本分镜智能体架构设计与实现 | 集成到 A2A 系统](https://pengline.github.io/2026/02/7e6cd67dd5ee45248f2276ac145555f5/)
+
+
+### 5. 使用 MCP Client
+
+安装环境
+
+```python
+# 使用 Python 模块方式启动 MCP Server
+python -m penshot.mcp_server
+# 或指定参数启动 MCP Server
+python -m penshot.mcp_server --max-concurrent 5 --queue-size 500
+```
+
+客户端方法示例
+
+```python
+def breakdown_script(self, script: str, wait: bool = False, timeout: int = 300) -> dict:
+    """拆分剧本"""
+    result = self._call("tools/call", {
+        "name": "breakdown_script",
+        "arguments": {
+            "script": script.strip(),
+            "wait": wait,
+            "timeout": timeout
+        }
+    })
+
+    if "error" in result:
+        raise Exception(result["error"]["message"])
+
+    content = result.get("result", {}).get("content", [])
+    if content and content[0].get("type") == "text":
+        text_content = content[0]["text"]
+        try:
+            parsed = json.loads(text_content)
+            return parsed
+        except json.JSONDecodeError:
+            print(f"   [DEBUG] JSON解析失败，原始文本: {text_content}")
+            return {}
+    return {}
+
+def get_task_result(self, task_id: str) -> dict:
+    """获取任务结果"""
+    result = self._call("tools/call", {
+        "name": "get_task_result",
+        "arguments": {"task_id": task_id}
+    })
+
+    content = result.get("result", {}).get("content", [])
+    if content and content[0].get("type") == "text":
+        return json.loads(content[0]["text"])
+    return {}
+```
+
+示例代码：[video-shot-agent/example/mcp_client.py at main · neopen/video-shot-agent](https://github.com/neopen/video-shot-agent/blob/main/example/mcp_client.py)
 
 
 
 ## 版本与展望
-
-限制与说明：
-
-> 1. **依赖外部API**：LLM版本需要稳定的网络连接
-> 2. **AI模型限制**：生成的视频质量受限于AI视频模型能力
-> 3. **处理长剧本**：长剧本可能需要分段处理
-> 4. **多语言支持**：主要针对中文优化，其他语言效果待测试
-> 5. **生成时长不确定**：AI生成的片段时长可能与预估不完全一致
-> 6. **连续性挑战**：保持分镜间的连续性可能存在技术难点
-> 7. **用户反馈机制**：当前版本不支持从用户反馈中学习优化
-> 8. **错误处理**：异常情况可能导致生成失败
-> 9. **声音同步**：实现声音与画面的一致性挑战，口型同步、环境音设计等需要进一步优化
-> 10. **专业级分镜**：达到专业导演水准需要持续迭代和优化
-
-### MVP版本
-
-1. **简单规则**：使用固定规则，无法处理复杂剧本结构
-2. **无状态记忆能力**：只支持一次拆解，不支持超长文本的多次拆分
-3. **无学习能力**：不会从用户反馈中学习优化
-4. **简单切割**：视频分割简单，会有一致性、连续性等问题
-5. **有限的自定义**：配置选项较少
-6. **错误处理简单**：遇到异常可能直接失败
 
 ### 短期计划
 

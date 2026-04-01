@@ -18,7 +18,8 @@ class BaseClient(ABC):
             self,
             config: AIConfig
     ):
-        self.config = config
+        self.llm_config = config.llm
+        self.embed_config = config.embed
 
     @abstractmethod
     def llm_model(self) -> BaseLanguageModel:

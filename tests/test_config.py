@@ -28,7 +28,7 @@ print(f"项目根目录: {PROJECT_ROOT}")
 print(f".env 文件: {ENV_FILE}")
 
 
-class LLMProviderConfig(BaseModel):
+class TestLLMProviderConfig(BaseModel):
     """LLM提供商配置"""
     base_url: str = Field(default="https://api.openai.com/v1")
     api_key: SecretStr = Field(default=SecretStr(""))
@@ -55,7 +55,7 @@ class LLMProviderConfig(BaseModel):
         return v
 
 
-class EmbeddingProviderConfig(BaseModel):
+class TestEmbeddingProviderConfig(BaseModel):
     """嵌入模型提供商配置"""
     base_url: str = Field(default="https://api.openai.com/v1")
     api_key: SecretStr = Field(default=SecretStr(""))
@@ -81,16 +81,16 @@ class EmbeddingProviderConfig(BaseModel):
         return v
 
 
-class LLMConfig(BaseModel):
+class TestLLMConfig(BaseModel):
     """LLM主配置"""
-    default: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
-    fallback: Optional[LLMProviderConfig] = Field(default_factory=LLMProviderConfig)
+    default: TestLLMProviderConfig = Field(default_factory=TestLLMProviderConfig)
+    fallback: Optional[TestLLMProviderConfig] = Field(default_factory=TestLLMProviderConfig)
 
 
-class EmbeddingConfig(BaseModel):
+class TestEmbeddingConfig(BaseModel):
     """嵌入模型主配置"""
-    default: EmbeddingProviderConfig = Field(default_factory=EmbeddingProviderConfig)
-    fallback: EmbeddingProviderConfig = Field(default_factory=EmbeddingProviderConfig)
+    default: TestEmbeddingProviderConfig = Field(default_factory=TestEmbeddingProviderConfig)
+    fallback: TestEmbeddingProviderConfig = Field(default_factory=TestEmbeddingProviderConfig)
 
 
 # ====== 2. 自定义环境变量源：智能转换键名 ======
@@ -124,8 +124,8 @@ class EmbeddingConfig(BaseModel):
 class Settings(BaseSettings):
     """主配置 - 优先级: 环境变量 > YAML > 模型默认值"""
     # AI 模型配置
-    llm: LLMConfig = Field(default_factory=LLMConfig)
-    embed: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    llm: TestLLMConfig = Field(default_factory=TestLLMConfig)
+    embed: TestEmbeddingConfig = Field(default_factory=TestEmbeddingConfig)
 
     model_config = SettingsConfigDict(
         case_sensitive=False,  # 设置大小写不敏感

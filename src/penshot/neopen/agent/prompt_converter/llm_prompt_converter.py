@@ -40,7 +40,9 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
         self.global_metadata = None
         self.last_audio_id = None
         self.element_map = {}  # 元素ID到原始内容的映射
+        #
         self.current_repair_params = None
+        self.current_historical_context = None
 
         # 初始化提示词
         self._init_prompts()
@@ -50,10 +52,15 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
         self.system_prompt = self._get_prompt_template("prompt_converter_system")
         self.user_prompt_template = self._get_prompt_template("prompt_converter_user")
 
+
     def convert(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript,
-                repair_params: Optional[QualityRepairParams]) -> AIVideoInstructions:
+                repair_params: Optional[QualityRepairParams],
+                historical_context: Optional[Dict[str, Any]]) -> AIVideoInstructions:
         """使用LLM转换提示词 - 同时生成视频和音频提示词"""
         info(f"使用LLM转换提示词，片段数: {len(fragment_sequence.fragments)}")
+
+        # 保存历史上下文
+        self.current_historical_context = historical_context
 
         # 如果有修复参数，保存到实例
         if repair_params:
@@ -75,7 +82,7 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
 
         for fragment in fragment_sequence.fragments:
             try:
-                prompt = self._convert_fragment_with_llm(fragment)
+                prompt = self._convert_fragment_with_llm(fragment, historical_context)
                 prompts.append(prompt)
             except Exception as e:
                 print_log_exception()
@@ -95,6 +102,7 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
             instructions = self._apply_repair_params(instructions, fragment_sequence)
 
         return self.post_process(instructions)
+
 
     def _apply_repair_params(self, instructions: AIVideoInstructions,
                              fragment_sequence: FragmentSequence) -> AIVideoInstructions:
@@ -216,7 +224,57 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
 
         return instructions
 
-    def _convert_fragment_with_llm(self, fragment: VideoFragment) -> AIVideoPrompt:
+
+    def _build_history_hint(self, historical_context: Optional[Dict[str, Any]]) -> str:
+        """构建历史上下文提示"""
+        if not historical_context:
+            return ""
+
+        hints = []
+
+        # 1. 常见问题模式
+        common_hint = self._get_common_issues_hint(historical_context, "提示词问题")
+        if common_hint:
+            hints.append(common_hint)
+
+        # 2. 历史统计信息
+        historical_stats = historical_context.get("historical_stats")
+        if historical_stats and isinstance(historical_stats, dict):
+            avg_prompt_length = historical_stats.get("avg_prompt_length", 0)
+            audio_count = historical_stats.get("audio_prompt_count", 0)
+            prompt_count = historical_stats.get("prompt_count", 1)
+            audio_ratio = audio_count / max(prompt_count, 1)
+
+            if avg_prompt_length > 0:
+                hints.append(f"历史转换统计: 平均提示词长度={avg_prompt_length:.0f}字符, 音频覆盖率={audio_ratio:.0%}")
+
+            if avg_prompt_length > 200:
+                hints.append("历史数据表明提示词偏长，建议精简描述，保持简洁。")
+            elif avg_prompt_length < 50:
+                hints.append("历史数据表明提示词偏短，建议增加细节描述。")
+
+            if audio_ratio < 0.5:
+                hints.append("历史数据表明音频提示词覆盖率较低，请为有对话或环境音的片段生成音频描述。")
+
+        # 3. 成功模式参考
+        successful_patterns = historical_context.get("successful_patterns")
+        if successful_patterns and isinstance(successful_patterns, list) and successful_patterns:
+            pattern_summary = successful_patterns[0][:100] if isinstance(successful_patterns[0], str) else str(successful_patterns[0])[:100]
+            hints.append(f"参考成功模式: {pattern_summary}...")
+
+        if not hints:
+            return ""
+
+        return "\n".join([
+            "",
+            "【历史提示词参考信息】",
+            *[f"  - {hint}" for hint in hints],
+            ""
+        ])
+
+
+    def _convert_fragment_with_llm(self, fragment: VideoFragment,
+                                   historical_context: Optional[Dict[str, Any]]) -> AIVideoPrompt:
         """使用LLM转换单个片段 - 同时生成视频和音频提示词"""
 
         # 检测原始剧本语言
@@ -242,13 +300,16 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
         repair_hint = ""
         if self.current_repair_params and self.current_repair_params.fix_needed and self.current_repair_params.issue_types:
             repair_hint = f"""
-                【重要：修复要求】
-                    之前的提示词存在以下问题：
-                    - 问题类型: {', '.join(self.current_repair_params.issue_types)}
-                    - 修复建议: {json.dumps(self.current_repair_params.suggestions, ensure_ascii=False) if self.current_repair_params.suggestions else '无'}
-                    
-                    请根据上述建议调整提示词生成策略，避免再次出现相同问题。
-                """
+            【重要：修复要求】
+            之前的提示词存在以下问题：
+            - 问题类型: {', '.join(self.current_repair_params.issue_types)}
+            - 修复建议: {json.dumps(self.current_repair_params.suggestions, ensure_ascii=False) if self.current_repair_params.suggestions else '无'}
+        
+            请根据上述建议调整提示词生成策略，避免再次出现相同问题。
+            """
+
+        # 构建历史上下文提示
+        history_hint = self._build_history_hint(historical_context)
 
         # 准备提示词 - 要求同时生成视频和音频
         user_prompt = self.user_prompt_template.format(
@@ -268,7 +329,8 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
             full_script_context=full_script_context,
             audio_context=json.dumps(audio_context, ensure_ascii=False, indent=2),
             characters_json=characters_json,
-            repair_hint=repair_hint
+            repair_hint=repair_hint,
+            history_hint=history_hint  # 添加历史上下文提示
         )
 
         # 调用LLM
@@ -293,6 +355,7 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
             style=result.get("style_hint"),
             audio_prompt=audio_prompt
         )
+
 
     def _build_element_map(self):
         """构建元素ID到原始内容的映射"""

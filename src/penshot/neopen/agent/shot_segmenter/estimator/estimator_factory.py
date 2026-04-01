@@ -51,7 +51,7 @@ class DurationEstimatorFactory:
     @classmethod
     def estimate_sequence(cls, sequence: ShotSequence, script: ParsedScript) -> ShotSequence:
         """估算整个序列"""
-        info(f"开始估算镜头序列，共{len(sequence.shots)}个镜头")
+        debug(f"开始估算镜头序列，共{len(sequence.shots)}个镜头")
 
         for i, shot in enumerate(sequence.shots):
             try:

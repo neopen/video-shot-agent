@@ -18,18 +18,18 @@ class DeepSeekClient(BaseClient):
 
     def __init__(self, config: AIConfig):
         super().__init__(config)
-        self.base_url = config.base_url or "https://api.deepseek.com/v1/chat/completions"
+        self.base_url = self.llm_config.base_url or "https://api.deepseek.com/v1/chat/completions"
 
     def llm_model(self) -> BaseLanguageModel:
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
-            model=self.config.model_name,
-            temperature=self.config.temperature,
-            api_key=self.config.api_key,
+            model=self.llm_config.model_name,
+            temperature=self.llm_config.temperature,
+            api_key=self.llm_config.api_key,
             base_url=self.base_url,
-            timeout=self.config.timeout,
-            max_retries=self.config.max_retries,
-            max_tokens=self.config.max_tokens,
+            timeout=self.llm_config.timeout,
+            max_retries=self.llm_config.max_retries,
+            max_tokens=self.llm_config.max_tokens,
         )
 
     def llm_embed(self) -> Embeddings:

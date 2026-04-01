@@ -12,10 +12,9 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from penshot.api import PenshotFunction
-from penshot.neopen import ShotConfig
-from penshot.neopen.shot_language import Language
-from penshot.neopen.task.task_models import TaskStatus
+from penshot import ShotConfig, ShotLanguage
+from penshot.api import create_penshot_agent
+from penshot.neopen.task import TaskStatus
 
 
 # ============================================================================
@@ -117,8 +116,7 @@ def create_web_app(
     )
 
     # 初始化服务
-    config = config or ShotConfig()
-    penshot = PenshotFunction(config=config)
+    penshot = create_penshot_agent()
 
     # 启用 CORS
     if enable_cors:
@@ -176,7 +174,7 @@ def create_web_app(
         提交剧本进行分镜生成，立即返回 task_id
         """
         try:
-            language = Language.ZH if request.language == "zh" else Language.EN
+            language = ShotLanguage.ZH if request.language == "zh" else ShotLanguage.EN
 
             # 确定任务ID
             task_id = request.task_id
@@ -222,7 +220,7 @@ def create_web_app(
         等待任务完成后返回结果
         """
         try:
-            language = Language.ZH if request.language == "zh" else Language.EN
+            language = ShotLanguage.ZH if request.language == "zh" else ShotLanguage.EN
 
             result = penshot.breakdown_script(
                 script_text=request.script_text,
@@ -260,7 +258,7 @@ def create_web_app(
         try:
             import uuid
             batch_id = request.batch_id or str(uuid.uuid4())
-            language = Language.ZH if request.language == "zh" else Language.EN
+            language = ShotLanguage.ZH if request.language == "zh" else ShotLanguage.EN
 
             # 批量提交
             task_ids = []
@@ -374,9 +372,8 @@ def create_web_app(
     async def get_default_config():
         """获取默认配置"""
         return {
-            "model_name": config.model_name,
-            "temperature": config.temperature,
-            "max_tokens": config.max_tokens,
+            "llm": config.llm,
+            "embed": config.embed,
             "supported_languages": ["zh", "en"]
         }
 

@@ -3,6 +3,7 @@ version: "1.3"
 changelog: |
   - 2026-03-18: 规范化提示词，细节性示例优化
   - 2026-03-27: 添加修复参数，通过修复建议和问题修复问题
+  - 2026-03-30: 添加 history_hint 参数，支持记忆功能的 历史上下文提示
 
 
 script_parser_system:
@@ -291,10 +292,10 @@ script_parser_user:
 
     {repair_hint}
     
+    {history_hint}
     
     【剧本内容】
     {script_text}
-    
     
     【音频解析规则】
       1. 环境音识别：

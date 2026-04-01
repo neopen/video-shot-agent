@@ -313,8 +313,7 @@ class PipelineDecision:
             PipelineState: 决策结果
         """
         # 检查是否已经审查过且结果有效
-        if hasattr(state, 'last_audit_result') and state.last_audit_result:
-            # 如果短时间内重复调用，使用上次结果
+        if state.audit_executed and state.audit_report:
             warning("检测到可能的重复质量审查调用，使用上次结果")
             return PipelineState.SUCCESS
 
@@ -445,17 +444,37 @@ class PipelineDecision:
             state.error_messages.append(f"连续性检查节点循环检查失败: {loop_reason}")
             return loop_decision
 
-        issues = state.continuity_issues
+        # 获取连续性问题
+        issues = getattr(state, 'continuity_issues', [])  # 使用 getattr 避免属性不存在
 
         # 检查是否有连续性问题
         if not issues:
             # 没有连续性问题，可以直接生成输出
             return PipelineState.SUCCESS
 
-        # 根据问题严重性分类
-        critical_issues = [i for i in issues if i.get("severity") == "critical"]
-        moderate_issues = [i for i in issues if i.get("severity") == "moderate"]
-        minor_issues = [i for i in issues if i.get("severity") == "minor"]
+        # 根据问题严重性分类（兼容不同格式）
+        critical_issues = []
+        moderate_issues = []
+        minor_issues = []
+
+        for issue in issues:
+            # 支持 ContinuityIssue 对象和字典格式
+            if hasattr(issue, 'severity'):
+                severity = issue.severity
+                if hasattr(severity, 'value'):
+                    severity = severity.value
+            else:
+                severity = issue.get("severity", "moderate")
+
+            if severity == "critical" or severity == "CRITICAL":
+                critical_issues.append(issue)
+            elif severity == "moderate" or severity == "MODERATE":
+                moderate_issues.append(issue)
+            elif severity == "minor" or severity == "MINOR":
+                minor_issues.append(issue)
+            else:
+                # 默认归类为中度
+                moderate_issues.append(issue)
 
         if critical_issues:
             warning(f"发现{len(critical_issues)}个严重连续性问题")
@@ -471,6 +490,7 @@ class PipelineDecision:
         else:
             warning(f"发现{len(issues)}个连续性问题，但严重性未知")
             return PipelineState.VALID
+
 
     def decide_after_error(self, state: WorkflowState) -> PipelineState:
         """错误处理后的决策

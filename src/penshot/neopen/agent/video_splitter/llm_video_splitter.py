@@ -50,10 +50,15 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseLLMAgent):
         self.system_prompt = self._get_prompt_template("video_splitter_system")
         self.user_prompt_template = self._get_prompt_template("video_splitter_user")
 
+
     def cut(self, shot_sequence: ShotSequence, parsed_script: ParsedScript,
-            repair_params: Optional[QualityRepairParams]) -> FragmentSequence:
+            repair_params: Optional[QualityRepairParams],
+            historical_context: Optional[Dict[str, Any]]) -> FragmentSequence:
         """使用LLM智能分割视频，从ParsedScript获取全局信息"""
-        info(f"开始智能视频分割，镜头数: {len(shot_sequence.shots)}")
+        debug(f"开始智能视频分割，镜头数: {len(shot_sequence.shots)}")
+
+        # 保存历史上下文
+        self.current_historical_context = historical_context
 
         # 如果有修复参数，保存到实例
         if repair_params:
@@ -78,12 +83,9 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseLLMAgent):
 
         for shot_idx, shot in enumerate(shot_sequence.shots):
             try:
-                # 修复镜头描述的连续性
                 shot = self._fix_shot_continuity(shot, shot_idx, shot_sequence)
-
                 debug(f"处理镜头 {shot.id}: {shot.description} (时长: {shot.duration}s)")
 
-                # 检查是否应该使用LLM分割
                 if self._should_use_llm_split(shot):
                     info(f"镜头 {shot.id} 时长({shot.duration}s)超过阈值，使用AI分割")
 
@@ -92,12 +94,11 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseLLMAgent):
                         "prev_shot": shot_sequence.shots[shot_idx - 1] if shot_idx > 0 else None,
                         "next_shot": shot_sequence.shots[shot_idx + 1] if shot_idx < len(shot_sequence.shots) - 1 else None,
                         "current_time": current_time,
-                        "fragment_offset": fragment_id_counter
+                        "fragment_offset": fragment_id_counter,
+                        "historical_context": historical_context  # 传递历史上下文
                     }
 
                     shot_fragments = self._split_shot_with_llm(context)
-
-                    # 修复分割后片段的描述
                     shot_fragments = self._fix_fragments_continuity(shot_fragments, shot)
 
                     validated_fragments = self._validate_and_adjust_fragments(
@@ -111,12 +112,8 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseLLMAgent):
                         current_time = validated_fragments[-1].start_time + validated_fragments[-1].duration
                 else:
                     debug(f"镜头 {shot.id} 使用规则分割")
-                    rule_fragments = self.rule_splitter.split_shot(
-                        shot, current_time, fragment_id_counter
-                    )
-
+                    rule_fragments = self.rule_splitter.split_shot(shot, current_time, fragment_id_counter)
                     rule_fragments = self._fix_fragments_continuity(rule_fragments, shot)
-
                     fragments.extend(rule_fragments)
                     fragment_id_counter += len(rule_fragments)
 
@@ -128,22 +125,16 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseLLMAgent):
                 print_log_exception()
                 warning(f"镜头{shot.id}降级到简单规则分割")
 
-                fallback_fragments = self.rule_splitter.split_shot(
-                    shot, current_time, fragment_id_counter
-                )
-
+                fallback_fragments = self.rule_splitter.split_shot(shot, current_time, fragment_id_counter)
                 fallback_fragments = self._fix_fragments_continuity(fallback_fragments, shot)
-
                 fragments.extend(fallback_fragments)
                 fragment_id_counter += len(fallback_fragments)
 
                 if fallback_fragments:
                     current_time = fallback_fragments[-1].start_time + fallback_fragments[-1].duration
 
-        # 后处理：规范化片段ID
         fragments = self._normalize_fragment_ids(fragments)
 
-        # 应用修复参数
         if self.current_repair_params and self.current_repair_params.fix_needed:
             fragments = self._apply_repair_params(fragments, shot_sequence)
 
@@ -159,8 +150,129 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseLLMAgent):
             }
         )
 
-        info(f"视频分割完成: 共生成{len(fragments)}个片段")
         return self.post_process(fragment_sequence)
+
+
+    def _build_history_hint(self, historical_context: Optional[Dict[str, Any]]) -> str:
+        """构建历史上下文提示"""
+        if not historical_context:
+            return ""
+
+        hints = []
+
+        # 1. 常见问题模式
+        common_hint = self._get_common_issues_hint(historical_context, "分割问题")
+        if common_hint:
+            hints.append(common_hint)
+
+        # 2. 历史统计信息
+        historical_stats = historical_context.get("historical_stats")
+        if historical_stats and isinstance(historical_stats, dict):
+            avg_fragment_count = historical_stats.get("fragment_count", 0)
+            avg_duration = historical_stats.get("avg_duration", 0)
+
+            if avg_fragment_count > 0:
+                hints.append(f"历史分割统计: 平均片段数={avg_fragment_count:.0f}, 平均时长={avg_duration:.1f}秒")
+
+            if avg_duration > 4.5:
+                hints.append("历史数据表明片段时长偏长，建议在动作停顿处增加分割点。")
+            elif avg_duration < 2.5:
+                hints.append("历史数据表明片段时长偏短，建议合并连续动作。")
+
+        # 3. 历史问题模式
+        issues_hint = self._get_historical_issues_hint(historical_context, "分割问题")
+        if issues_hint:
+            hints.append(issues_hint)
+
+        if not hints:
+            return ""
+
+        return "\n".join([
+            "",
+            "【历史分割参考信息】",
+            *[f"  - {hint}" for hint in hints],
+            ""
+        ])
+
+
+    def _get_enhanced_prompt_template(self, context: Dict[str, Any]) -> str:
+        """获取增强的提示词模板 - 使用global_metadata"""
+        shot = context["shot"]
+        prev_shot = context.get("prev_shot")
+        next_shot = context.get("next_shot")
+        historical_context = context.get("historical_context")
+
+        # 格式化全局上下文
+        global_context = self._format_global_context(self.global_metadata, shot.scene_id)
+
+        # 构建场景信息
+        scene_info = self._get_scene_info(shot.scene_id, self.parsed_script)
+
+        # 构建修复提示
+        repair_hint = ""
+        if self.current_repair_params and self.current_repair_params.fix_needed and self.current_repair_params.issue_types:
+            repair_hint = f"""
+            【重要：修复要求】
+            之前的分割存在以下问题：
+            - 问题类型: {', '.join(self.current_repair_params.issue_types)}
+            - 修复建议: {json.dumps(self.current_repair_params.suggestions, ensure_ascii=False) if self.current_repair_params.suggestions else '无'}
+        
+            请根据上述建议调整分割策略，避免再次出现相同问题。
+            """
+
+        # 构建历史上下文提示
+        history_hint = self._build_history_hint(historical_context)
+
+        prev_context = ""
+        if prev_shot:
+            prev_context = f"{prev_shot.description} ({prev_shot.duration}s)"
+
+        next_context = ""
+        if next_shot:
+            next_context = f"{next_shot.description} ({next_shot.duration}s)"
+
+        return self.user_prompt_template.format(
+            shot_id=shot.id,
+            description=shot.description,
+            duration=shot.duration,
+            shot_type=shot.shot_type.value if hasattr(shot.shot_type, 'value') else str(shot.shot_type),
+            main_character=shot.main_character or "无",
+            scene_info=scene_info,
+            prev_context=prev_context,
+            next_context=next_context,
+            split_threshold=self.split_threshold,
+            min_segment=self.min_split_segment,
+            max_segment=self.max_split_segment,
+            continuity_notes=self._get_continuity_notes(shot),
+            global_context=global_context,
+            repair_hint=repair_hint,
+            history_hint=history_hint  # 添加历史上下文提示
+        )
+
+    def _should_use_llm_split(self, shot: ShotInfo) -> bool:
+        """判断是否应该使用AI分割"""
+        if shot.duration <= self.split_threshold:
+            return False
+
+        complex_shots = ["ACTION", "MOVING", "PANORAMA", "ZOOM"]
+        if shot.shot_type in complex_shots:
+            return True
+
+        if shot.description and any(keyword in shot.description.lower()
+                                    for keyword in ["对话", "交谈", "讨论", "talk", "conversation"]):
+            return True
+
+        return True
+
+    def _collect_valid_scene_ids(self, shot_sequence: ShotSequence):
+        """收集所有有效的场景ID"""
+        self.valid_scene_ids.clear()
+        for shot in shot_sequence.shots:
+            if hasattr(shot, 'scene_id') and shot.scene_id:
+                self.valid_scene_ids.add(shot.scene_id)
+        debug(f"有效场景ID: {self.valid_scene_ids}")
+
+
 
     def _apply_repair_params(self, fragments: List[VideoFragment],
                              shot_sequence: ShotSequence) -> List[VideoFragment]:
@@ -259,77 +371,6 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseLLMAgent):
         info("修复连续性注释")
         return fragments
 
-    def _get_enhanced_prompt_template(self, context: Dict[str, Any]) -> str:
-        """获取增强的提示词模板 - 使用global_metadata"""
-        shot = context["shot"]
-        prev_shot = context.get("prev_shot")
-        next_shot = context.get("next_shot")
-
-        # 格式化全局上下文
-        global_context = self._format_global_context(self.global_metadata, shot.scene_id)
-
-        # 构建场景信息
-        scene_info = self._get_scene_info(shot.scene_id, self.parsed_script)
-
-        # 构建修复提示
-        repair_hint = ""
-        if self.current_repair_params and self.current_repair_params.fix_needed and self.current_repair_params.issue_types:
-            repair_hint = f"""
-                【重要：修复要求】
-                    之前的分割存在以下问题：
-                    - 问题类型: {', '.join(self.current_repair_params.issue_types)}
-                    - 修复建议: {json.dumps(self.current_repair_params.suggestions, ensure_ascii=False) if self.current_repair_params.suggestions else '无'}
-                    
-                    请根据上述建议调整分割策略，避免再次出现相同问题。
-                """
-
-        prev_context = ""
-        if prev_shot:
-            prev_context = f"{prev_shot.description} ({prev_shot.duration}s)"
-
-        next_context = ""
-        if next_shot:
-            next_context = f"{next_shot.description} ({next_shot.duration}s)"
-
-        return self.user_prompt_template.format(
-            shot_id=shot.id,
-            description=shot.description,
-            duration=shot.duration,
-            shot_type=shot.shot_type.value if hasattr(shot.shot_type, 'value') else str(shot.shot_type),
-            main_character=shot.main_character or "无",
-            scene_info=scene_info,
-            prev_context=prev_context,
-            next_context=next_context,
-            split_threshold=self.split_threshold,
-            min_segment=self.min_split_segment,
-            max_segment=self.max_split_segment,
-            continuity_notes=self._get_continuity_notes(shot),
-            global_context=global_context,
-            repair_hint=repair_hint
-        )
-
-    def _should_use_llm_split(self, shot: ShotInfo) -> bool:
-        """判断是否应该使用AI分割"""
-        if shot.duration <= self.split_threshold:
-            return False
-
-        complex_shots = ["ACTION", "MOVING", "PANORAMA", "ZOOM"]
-        if shot.shot_type in complex_shots:
-            return True
-
-        if shot.description and any(keyword in shot.description.lower()
-                                    for keyword in ["对话", "交谈", "讨论", "talk", "conversation"]):
-            return True
-
-        return True
-
-    def _collect_valid_scene_ids(self, shot_sequence: ShotSequence):
-        """收集所有有效的场景ID"""
-        self.valid_scene_ids.clear()
-        for shot in shot_sequence.shots:
-            if hasattr(shot, 'scene_id') and shot.scene_id:
-                self.valid_scene_ids.add(shot.scene_id)
-        debug(f"有效场景ID: {self.valid_scene_ids}")
 
     def _fix_shot_continuity(self, shot: ShotInfo, shot_idx: int, shot_sequence: ShotSequence) -> ShotInfo:
         """修复镜头描述的连续性"""
@@ -389,6 +430,7 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseLLMAgent):
 
         return normalized
 
+
     def _split_shot_with_llm(self, context: Dict[str, Any]) -> List[VideoFragment]:
         """使用LLM分割单个镜头"""
         shot = context["shot"]
@@ -398,11 +440,14 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseLLMAgent):
             debug(f"使用缓存的分割决策: {shot.id}")
             return self._create_fragments_from_cache(self.split_cache[cache_key], context)
 
-        # 准备提示词 - 传入global_metadata
+        # 准备提示词 - 传入历史上下文
         user_prompt = self._get_enhanced_prompt_template(context)
         system_prompt = self._get_prompt_template("video_splitter_system")
 
         debug(f"调用LLM分割镜头 {shot.id}")
+        if context.get("historical_context"):
+            debug(f"历史上下文已加载，将参考历史分割经验")
+
         start_time = time.time()
 
         try:
@@ -430,6 +475,7 @@ class LLMVideoSplitter(BaseVideoSplitter, BaseLLMAgent):
         except Exception as e:
             error(f"LLM分割失败: {str(e)}")
             raise
+
 
     def _get_continuity_notes(self, shot: ShotInfo) -> str:
         """生成连续性说明"""

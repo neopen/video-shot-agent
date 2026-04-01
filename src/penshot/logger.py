@@ -106,10 +106,10 @@ class LoggingConfigManager:
         try:
             with open(self.logging_config_file, 'r', encoding='utf-8') as f:
                 self._config_cache = yaml.safe_load(f) or {}
-                print(f"加载日志配置: {self.logging_config_file}")
+                # print(f"加载日志配置: {self.logging_config_file}")
                 return self._config_cache
         except Exception as e:
-            print(f"加载日志配置失败: {e}")
+            # print(f"加载日志配置失败: {e}")
             self._config_cache = {}
             return self._config_cache
 

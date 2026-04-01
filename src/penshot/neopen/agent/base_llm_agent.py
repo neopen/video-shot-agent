@@ -6,6 +6,7 @@
 @Time: 2026/1/9 21:23
 """
 import time
+from abc import abstractmethod
 from typing import Any, Dict, Optional
 
 from penshot.neopen.agent.base_agent import BaseAgent
@@ -21,9 +22,26 @@ class BaseLLMAgent(BaseAgent):
         """创建LLM提示词模板"""
         return prompt_manager.get_name_prompt(key_name)
 
+    # ===================== 抽象方法（子类实现） =====================
+    @abstractmethod
+    def _build_history_hint(self, historical_context: Optional[Dict[str, Any]]) -> str:
+        """
+        构建历史上下文提示（子类实现）
+
+        Args:
+            historical_context: 历史上下文
+
+        Returns:
+            格式化的历史提示字符串
+        """
+        pass
+
     def _parse_llm_response(self, ai_response: str) -> Dict[str, Any]:
         """ 转换LLM响应，必要时需要重写该方法 """
         return parse_json_response(ai_response)
+
+    def process(self, *args, **kwargs) -> Optional[str]:
+        pass
 
     def _call_llm_parse_with_retry(self, llm, system_prompt: str, user_prompt, max_retries: int = 2) -> Optional[Dict[str, Any]]:
         """

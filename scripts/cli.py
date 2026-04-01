@@ -21,7 +21,7 @@ import sys
 import time
 from typing import Dict
 
-from penshot.api import PenshotFunction, Language, __version__
+from penshot.api import PenshotFunction, ShotLanguage, __version__
 from penshot.neopen.task.task_models import TaskStatus
 
 
@@ -176,7 +176,7 @@ def cmd_breakdown(args):
         print_info(f"剧本长度: {len(script)}字符")
 
     # 创建智能体
-    language = Language.ZH if args.language == "zh" else Language.EN
+    language = ShotLanguage.ZH if args.language == "zh" else ShotLanguage.EN
     agent = PenshotFunction(language=language, max_concurrent=5)
 
     # 执行分镜
@@ -358,7 +358,7 @@ def cmd_batch(args):
 
     print_info(f"批量处理 {len(scripts)} 个剧本")
 
-    language = Language.ZH if args.language == "zh" else Language.EN
+    language = ShotLanguage.ZH if args.language == "zh" else ShotLanguage.EN
     agent = PenshotFunction(language=language, max_concurrent=5)
 
     # 执行批量处理
@@ -420,7 +420,7 @@ def cmd_serve(args):
     print_info("启动中... (按 Ctrl+C 停止)")
 
     try:
-        from penshot.api.mcp_server import run_mcp_server
+        from penshot.mcp_server import run_mcp_server
         run_mcp_server()
     except KeyboardInterrupt:
         print("\n")

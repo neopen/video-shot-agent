@@ -6,7 +6,7 @@
 @Time: 2026/1/26 22:30
 """
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Any, Dict
 
 from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityRepairParams
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript
@@ -28,7 +28,8 @@ class BaseVideoSplitter(ABC):
         debug(f"初始化视频分割器: {self.__class__.__name__}")
 
     @abstractmethod
-    def cut(self, shot_sequence: ShotSequence, parsed_script: ParsedScript, repair_params: Optional[QualityRepairParams]) -> FragmentSequence:
+    def cut(self, shot_sequence: ShotSequence, parsed_script: ParsedScript,
+            repair_params: Optional[QualityRepairParams], historical_context: Optional[Dict[str, Any]]) -> FragmentSequence:
         """将镜头序列分割为片段（抽象方法）"""
         pass
 

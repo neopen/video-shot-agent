@@ -11,8 +11,7 @@ from enum import Enum
 from typing import Dict, Any, Optional, List
 
 from penshot.api import PenshotFunction, PenshotResult
-from penshot.neopen import ShotConfig
-from penshot.neopen.shot_language import Language
+from penshot import ShotConfig, ShotLanguage
 
 
 class TaskPriority(int, Enum):
@@ -91,7 +90,7 @@ class StoryboardA2AAgent:
         try:
             # 使用信号量控制并发
             async with self._semaphore:
-                language = Language.ZH if task.language == "zh" else Language.EN
+                language = ShotLanguage.ZH if task.language == "zh" else ShotLanguage.EN
 
                 # 提交任务
                 task_id = self.penshot.breakdown_script_async(
@@ -132,7 +131,7 @@ class StoryboardA2AAgent:
         # 创建后台任务
         async def _process():
             try:
-                language = Language.ZH if task.language == "zh" else Language.EN
+                language = ShotLanguage.ZH if task.language == "zh" else ShotLanguage.EN
 
                 task_id = self.penshot.breakdown_script_async(
                     script_text=task.script_content,

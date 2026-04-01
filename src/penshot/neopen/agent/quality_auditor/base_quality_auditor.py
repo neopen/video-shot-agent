@@ -45,7 +45,7 @@ class BaseQualityAuditor(ABC):
         }
 
     @abstractmethod
-    def audit(self, instructions: AIVideoInstructions) -> QualityAuditReport:
+    def audit(self, instructions: AIVideoInstructions, historical_context: Optional[Dict[str, Any]] = None) -> QualityAuditReport:
         """审查AI视频指令（抽象方法）"""
         pass
 

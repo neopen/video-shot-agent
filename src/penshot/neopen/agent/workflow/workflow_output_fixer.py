@@ -112,7 +112,7 @@ class WorkflowOutputFixer:
                 correct_fragment_sequence = self._deep_search_fragment_sequence(state_dict)
 
             if correct_fragment_sequence:
-                info(f"找到正确的片段序列: {len(correct_fragment_sequence.fragments)}个片段")
+                debug(f"找到正确的片段序列: {len(correct_fragment_sequence.fragments)}个片段")
 
                 # 修复最终输出
                 fixed_result = self._fix_final_result(state_dict, correct_fragment_sequence, initial_state)
@@ -159,7 +159,7 @@ class WorkflowOutputFixer:
                     if self._is_valid_fragment_sequence(candidate):
                         fragment_sequence = self._convert_to_fragment_sequence(candidate)
                         if fragment_sequence:
-                            info(f"从键 '{key}' 找到有效的片段序列")
+                            debug(f"从键 '{key}' 找到有效的片段序列")
                             return fragment_sequence
 
             # 检查workflow状态中的其他数据

@@ -2,6 +2,7 @@
 @FileName: function_calls.py
 @Description: Function Call接口 - 供其他Python智能体调用
 @Author: HiPeng
+@Github: https://github.com/neopen/video-shot-agent
 @Time: 2026/3/23 18:39
 """
 
@@ -13,7 +14,7 @@ from typing import Dict, Optional, List, Any, Callable
 
 from penshot.logger import log_with_context, info, error
 from penshot.neopen.shot_config import ShotConfig
-from penshot.neopen.shot_language import Language, set_language
+from penshot.neopen.shot_language import ShotLanguage, set_language
 from penshot.neopen.task.task_factory import create_task_factory, TaskFactory, TaskResponse, TaskPriority
 from penshot.neopen.task.task_models import TaskStatus
 from penshot.utils.log_utils import print_log_exception
@@ -51,7 +52,7 @@ class PenshotFunction:
     def __init__(
             self,
             config: Optional[ShotConfig] = None,
-            language: Language = Language.ZH,
+            language: ShotLanguage = ShotLanguage.ZH,
             max_concurrent: int = 10,
             queue_size: int = 1000
     ):
@@ -115,7 +116,7 @@ class PenshotFunction:
             self,
             script_text: str,
             task_id: Optional[str] = None,
-            language: Optional[Language] = None,
+            language: Optional[ShotLanguage] = None,
             wait_timeout: float = 300.0,
             priority: TaskPriority = TaskPriority.NORMAL
     ) -> PenshotResult:
@@ -144,7 +145,7 @@ class PenshotFunction:
             self,
             script_text: str,
             task_id: Optional[str] = None,
-            language: Optional[Language] = None,
+            language: Optional[ShotLanguage] = None,
             callback: Optional[Callable] = None,
             priority: TaskPriority = TaskPriority.NORMAL
     ) -> str:
@@ -212,26 +213,34 @@ class PenshotFunction:
 
     def get_task_status(self, task_id: str) -> Optional[Dict]:
         """
-        获取任务状态
+        获取任务状态（增强版）
 
-        Args:
-            task_id: 任务ID
-
-        Returns:
-            Dict: 任务状态信息
+        返回包含详细进度信息的字典
         """
         status = self.task_factory.get_status(task_id)
-        if status:
-            return {
-                "task_id": status.task_id,
-                "status": status.status,
-                "stage": status.stage,
-                "progress": status.progress,
-                "created_at": status.created_at,
-                "updated_at": status.updated_at,
-                "error": status.error_message
-            }
-        return None
+        if not status:
+            return None
+
+        # 构建详细进度信息
+        result = {
+            "task_id": status.task_id,
+            "status": status.status,
+            "stage": status.stage,
+            "stage_name": status.stage_name if hasattr(status, 'stage_name') else status.stage,
+            "progress": status.progress,
+            "created_at": status.created_at,
+            "updated_at": status.updated_at,
+            "error": status.error_message
+        }
+
+        # 添加详细阶段进度
+        if hasattr(status, 'current_stage') and status.current_stage:
+            result["current_stage"] = status.current_stage
+
+        if hasattr(status, 'stages_progress') and status.stages_progress:
+            result["stages_progress"] = status.stages_progress
+
+        return result
 
     def get_task_result(self, task_id: str) -> Optional[PenshotResult]:
         """
@@ -339,7 +348,7 @@ class PenshotFunction:
     def batch_breakdown(
             self,
             scripts: List[str],
-            language: Optional[Language] = None,
+            language: Optional[ShotLanguage] = None,
             wait_timeout: float = 600.0,
             priority: TaskPriority = TaskPriority.NORMAL
     ) -> List[PenshotResult]:
@@ -371,7 +380,7 @@ class PenshotFunction:
     async def batch_breakdown_async(
             self,
             scripts: List[str],
-            language: Optional[Language] = None,
+            language: Optional[ShotLanguage] = None,
             max_concurrent: int = 3,
             priority: TaskPriority = TaskPriority.NORMAL
     ) -> List[PenshotResult]:
@@ -467,7 +476,7 @@ class PenshotFunction:
 
 def create_penshot_agent(
         config: Optional[ShotConfig] = None,
-        language: Language = Language.ZH,
+        language: ShotLanguage = ShotLanguage.ZH,
         max_concurrent: int = 10,
         queue_size: int = 1000
 ) -> PenshotFunction:

@@ -14,8 +14,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 
 from penshot.api import PenshotFunction, PenshotResult
-from penshot.neopen import ShotConfig
-from penshot.neopen.shot_language import Language
+from penshot import ShotConfig, ShotLanguage
 
 
 # ============================================================================
@@ -82,7 +81,7 @@ class StoryboardWorkflowNodes:
         print(f"[节点] 提交任务: {state.script_text[:50]}...")
 
         # 确定语言
-        language = Language.ZH if state.language == "zh" else Language.EN
+        language = ShotLanguage.ZH if state.language == "zh" else ShotLanguage.EN
 
         # 创建临时智能体（或复用）
         task_id = self.agent.breakdown_script_async(

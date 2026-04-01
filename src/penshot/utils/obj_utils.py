@@ -5,14 +5,12 @@
 @Github: https://github.com/neopen/video-shot-agent
 @Time: 2026/1/11 23:39
 """
-from copy import deepcopy
-from dataclasses import fields
-from typing import Optional
-from typing import get_type_hints, get_origin, get_args
-from enum import Enum
-from dataclasses import is_dataclass, asdict
-from typing import Any, Dict, List, Union
+import inspect
 from collections import deque
+from copy import deepcopy
+from dataclasses import asdict, fields, is_dataclass
+from enum import Enum
+from typing import Any, Dict, List, Union, get_origin, get_args, Optional, get_type_hints
 
 
 class JSONObject:
@@ -27,6 +25,22 @@ class JSONObject:
 
     def __repr__(self):
         return str(self.__dict__)
+
+
+# 尝试导入 SecretStr，如果不存在则定义占位符
+try:
+    from pydantic import SecretStr
+except ImportError:
+    # 定义简单的 SecretStr 类用于类型检查
+    class SecretStr:
+        def __init__(self, value: str = ""):
+            self._value = value
+
+        def __str__(self):
+            return "**********"
+
+        def get_secret_value(self):
+            return self._value
 
 
 # ================================== obj 转 dict ==================================
@@ -163,6 +177,7 @@ def _is_enum_subclass(obj: Any) -> bool:
         return False
     except Exception:
         return False
+
 
 def obj_to_dict_safe(
         obj: Any,
@@ -377,8 +392,28 @@ def dict_to_dataclass(data, cls) -> Any:
             return cls(**kwargs)
 
 
+def is_special_type(clazz) -> bool:
+    """检查是否为需要特殊处理的类型"""
+    # SecretStr 特殊处理
+    if clazz is SecretStr:
+        return True
+
+    # 可以扩展其他特殊类型
+    special_types = (SecretStr,)
+    return clazz in special_types
+
+
 def dict_to_obj(data: Any, clazz) -> Any:
-    """ 将字典或其他数据结构转换为指定类型的对象。"""
+    """将字典或其他数据结构转换为指定类型的对象。
+
+    优化点：
+    1. 添加对 dataclass 的支持
+    2. 修复字段类型检测逻辑
+    3. 增加对枚举类型的支持
+    4. 更好的错误处理和类型校验
+    5. 支持嵌套对象转换
+    6. 支持 SecretStr 等特殊类型
+    """
     if data is None:
         return None
 
@@ -392,13 +427,17 @@ def dict_to_obj(data: Any, clazz) -> Any:
 
     # 情况1: clazz 是 Dict[...] 或 dict
     if origin is dict or clazz is dict or (origin in (Dict, dict)):
-        # Dict[K, V] → 我们只关心 value 类型（args[1]）
+        if not isinstance(data, dict):
+            return data
         key_type = args[0] if args else str
         value_type = args[1] if len(args) > 1 else Any
-        return {k: dict_to_obj(v, value_type) for k, v in data.items()}
+        return {dict_to_obj(k, key_type): dict_to_obj(v, value_type)
+                for k, v in data.items()}
 
     # 情况2: clazz 是 List[...] 或 list
     if origin is list or clazz is list or (origin in (List, list)):
+        if not isinstance(data, list):
+            return data
         item_type = args[0] if args else Any
         return [dict_to_obj(item, item_type) for item in data]
 
@@ -411,22 +450,93 @@ def dict_to_obj(data: Any, clazz) -> Any:
             return dict_to_obj(data, non_none_types[0])
         return data
 
-    # 情况4: clazz 是一个普通类（如 Person, Address）
+    # 情况4: clazz 是枚举类型
+    if hasattr(clazz, '__members__') and inspect.isclass(clazz):
+        try:
+            return clazz(data)
+        except (ValueError, TypeError):
+            return data
+
+    # 情况5: clazz 是 SecretStr 等特殊类型
+    if is_special_type(clazz):
+        try:
+            # 如果已经是 SecretStr 类型，直接返回
+            if isinstance(data, SecretStr):
+                return data
+            # 如果是字符串，创建 SecretStr 实例
+            if isinstance(data, str):
+                return SecretStr(data)
+            # 如果是其他类型，尝试转换
+            return SecretStr(str(data))
+        except Exception:
+            # 转换失败，返回空 SecretStr
+            return SecretStr("")
+
+    # 情况6: clazz 是普通类
     if isinstance(clazz, type) and hasattr(clazz, '__init__'):
+        # 处理基本类型：如果目标是基本类型，直接返回
+        if clazz in (str, int, float, bool, complex, bytes, bytearray):
+            return clazz(data) if not isinstance(data, clazz) else data
+
+        # 处理字典数据
         if isinstance(data, dict):
             try:
-                annotations = get_type_hints(clazz)
+                # 优先使用 dataclass 的字段信息
+                if is_dataclass(clazz):
+                    field_types = {f.name: f.type for f in fields(clazz)}
+                else:
+                    # 使用类型注解
+                    field_types = get_type_hints(clazz)
             except Exception:
-                annotations = {}
+                field_types = {}
 
             kwargs = {}
             for key, value in data.items():
-                field_type = annotations.get(key, Any)
+                # 获取字段类型
+                field_type = field_types.get(key)
+
+                # 如果没有类型注解，尝试从构造函数参数推断
+                if field_type is None:
+                    # 检查是否是 __init__ 的参数
+                    try:
+                        sig = inspect.signature(clazz.__init__)
+                        param = sig.parameters.get(key)
+                        if param and param.annotation != inspect.Parameter.empty:
+                            field_type = param.annotation
+                        else:
+                            field_type = Any
+                    except (ValueError, TypeError):
+                        field_type = Any
+
+                # 递归转换值
                 kwargs[key] = dict_to_obj(value, field_type)
-            return clazz(**kwargs)
+
+            try:
+                return clazz(**kwargs)
+            except TypeError as e:
+                # 如果参数不匹配，尝试只传递存在的参数
+                if "unexpected keyword argument" in str(e):
+                    # 获取可接受的参数名
+                    sig = inspect.signature(clazz.__init__)
+                    valid_params = set(sig.parameters.keys()) - {'self'}
+                    filtered_kwargs = {k: v for k, v in kwargs.items()
+                                       if k in valid_params}
+
+                    # 特殊处理 SecretStr 字段
+                    for param_name, param_value in filtered_kwargs.items():
+                        # 如果参数类型是 SecretStr 但值不是，进行转换
+                        param_type = field_types.get(param_name)
+                        if param_type is SecretStr and not isinstance(param_value, SecretStr):
+                            filtered_kwargs[param_name] = SecretStr(str(param_value))
+
+                    return clazz(**filtered_kwargs)
+                raise
         else:
-            # 数据不是 dict，但目标是类？可能出错，回退
-            return data
+            # 数据不是 dict，尝试直接实例化
+            try:
+                return clazz(data)
+            except (TypeError, ValueError):
+                return data
 
     # 默认：无法识别类型，原样返回
     return data

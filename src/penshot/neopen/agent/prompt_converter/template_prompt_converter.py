@@ -5,7 +5,7 @@
 @Github: https://github.com/neopen/video-shot-agent
 @Time: 2026/1/26 23:41
 """
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from penshot.neopen.agent.prompt_converter.base_prompt_converter import BasePromptConverter
 from penshot.neopen.agent.prompt_converter.prompt_converter_models import AIVideoInstructions, AIVideoPrompt
@@ -29,7 +29,8 @@ class TemplatePromptConverter(BasePromptConverter):
             ShotType.WIDE_SHOT: "Wide shot, {location}, {description}, cinematic, establishing shot"
         }
 
-    def convert(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript, repair_params: Optional[QualityRepairParams]) -> AIVideoInstructions:
+    def convert(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript,
+                repair_params: Optional[QualityRepairParams], historical_context: Optional[Dict[str, Any]]) -> AIVideoInstructions:
         """使用模板将片段转换为提示词"""
         info(f"开始提示词转换，片段数: {len(fragment_sequence.fragments)}")
 

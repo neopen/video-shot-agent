@@ -9,14 +9,14 @@ from functools import lru_cache
 from typing import Dict, Any
 
 from penshot.neopen.config.base_config import BaseConfig
-from penshot.neopen.shot_language import Language
+from penshot.neopen.shot_language import ShotLanguage
 from penshot.logger import debug
 
 
 class TemporalPlannerConfig(BaseConfig):
     """时序规划智能体配置类"""
 
-    def _initialize_config(self, language: Language = Language.ZH):
+    def _initialize_config(self, language: ShotLanguage = ShotLanguage.ZH):
         """初始化配置管理器
         
         Args:
@@ -127,7 +127,7 @@ class TemporalPlannerConfig(BaseConfig):
 planner_config = TemporalPlannerConfig()
 
 
-def get_planner_config(language: Language = None) -> TemporalPlannerConfig:
+def get_planner_config(language: ShotLanguage = None) -> TemporalPlannerConfig:
     """
     获取时序规划配置实例
     

@@ -10,7 +10,7 @@ from typing import Dict, Any
 import jieba
 
 from penshot.neopen.config.base_config import BaseConfig
-from penshot.neopen.shot_language import Language
+from penshot.neopen.shot_language import ShotLanguage
 
 
 class ActionDurationConfig(BaseConfig):
@@ -20,7 +20,7 @@ class ActionDurationConfig(BaseConfig):
     - 角色因子仅在顶层应用一次
     - 动作/对话内部逻辑与角色完全解耦合
     """
-    def _initialize_config(self, language: Language = Language.ZH):
+    def _initialize_config(self, language: ShotLanguage = ShotLanguage.ZH):
         self._language = language
         self._init_jieba()
 

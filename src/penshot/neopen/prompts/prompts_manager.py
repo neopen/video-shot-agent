@@ -11,13 +11,13 @@ from typing import Dict, Any
 import yaml
 
 from penshot.neopen import prompts
-from penshot.neopen.shot_language import Language, get_language
+from penshot.neopen.shot_language import ShotLanguage, get_language
 from penshot.logger import error
 from penshot.utils.log_utils import print_log_exception
 
 
 class PromptManager:
-    def __init__(self, version: str = "v1.x", language: Language = Language.ZH):
+    def __init__(self, version: str = "v1.x", language: ShotLanguage = ShotLanguage.ZH):
         # 默认使用当前文件的父目录
         self.prompt_dir = Path(__file__).parent / version / language.value
         # 缓存已加载的提示词模板 - 最大缓存1024个提示词

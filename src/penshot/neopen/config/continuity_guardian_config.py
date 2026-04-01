@@ -11,11 +11,11 @@ from typing import Dict, List, Any, Optional
 import yaml
 
 from penshot.logger import debug, warning
-from penshot.neopen.shot_language import Language
+from penshot.neopen.shot_language import ShotLanguage
 
 
 class ContinuityGuardianConfig:
-    def __init__(self, language: Language = None):
+    def __init__(self, language:ShotLanguage = None):
         """初始化连续性守护智能体
         
         Args:
@@ -25,7 +25,7 @@ class ContinuityGuardianConfig:
         self.character_states = {}
         
         # 设置当前语言
-        self._language = language or Language.ZH.value
+        self._language = language or ShotLanguage.ZH.value
         
         # 设置配置文件路径
         self._set_config_path()
@@ -44,7 +44,7 @@ class ContinuityGuardianConfig:
         current_dir = os.path.dirname(os.path.dirname(__file__))
         
         # 根据语言选择配置文件路径
-        if self._language == Language.EN.value:
+        if self._language == ShotLanguage.EN.value:
             config_file = 'en/continuity_guardian_config.yaml'
         else:
             config_file = 'zh/continuity_guardian_config.yaml'
@@ -176,7 +176,7 @@ class ContinuityGuardianConfig:
             # 没有外观信息时使用简单描述
             return f"{character_name}, {state.get('pose')}, {state.get('emotion')}"
     
-    def set_language(self, language: Language):
+    def set_language(self, language: ShotLanguage):
         """设置语言并重新加载配置
         
         Args:

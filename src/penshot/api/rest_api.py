@@ -17,10 +17,10 @@ from pydantic import BaseModel, Field, field_validator
 from penshot.logger import info, error, log_with_context
 from penshot.neopen.shot_config import ShotConfig
 from penshot.neopen.shot_context import task_id_ctx
-from penshot.neopen.shot_language import set_language, Language
+from penshot.neopen.shot_language import set_language, ShotLanguage
 from penshot.neopen.task.task_init import get_task_factory
 from penshot.neopen.task.task_models import (
-    ProcessingStatus, TaskStatus, TaskResponse
+    ProcessingStatus, TaskStatus, TaskResponse, TaskStage
 )
 from penshot.utils.log_utils import print_log_exception
 
@@ -53,7 +53,7 @@ class SyncProcessRequest(BaseModel):
     """同步处理请求"""
     script: str
     task_id: Optional[str] = None
-    language: Language = Language.ZH
+    language: ShotLanguage = ShotLanguage.ZH
     config: Optional[ShotConfig] = None
     timeout: float = 300
 
@@ -69,11 +69,11 @@ class ProcessRequest(BaseModel):
     config: Optional[ShotConfig] = Field(default_factory=ShotConfig, description="处理配置（序列化形式）")
     callback_url: Optional[str] = Field(default=None, description="回调URL，处理完成后通知（可选）")
     task_id: str = Field(default_factory=_generate_task_id, description="外部请求ID（可选）")
-    language: Language = Field(default=Language.ZH, description='剧本语言，例如 "zh" 或 "en"')
+    language: ShotLanguage = Field(default=ShotLanguage.ZH, description='剧本语言，例如 "zh" 或 "en"')
 
     @field_validator("language")
     def validate_language(cls, v):
-        if v not in {Language.ZH, Language.EN}:
+        if v not in {ShotLanguage.ZH, ShotLanguage.EN}:
             raise ValueError("language must be one of: 'zh', 'en'")
         return v
 
@@ -107,11 +107,11 @@ class BatchProcessRequest(BaseModel):
     scripts: List[str] = Field(..., description="剧本列表")
     config: Optional[Dict[str, Any]] = Field(default_factory=dict)
     batch_id: Optional[str] = None
-    language: Language = Field(default=Language.ZH, description='剧本语言，例如 "zh" 或 "en"')
+    language: ShotLanguage = Field(default=ShotLanguage.ZH, description='剧本语言，例如 "zh" 或 "en"')
 
     @field_validator("language")
     def validate_language(cls, v):
-        if v not in {Language.ZH, Language.EN}:
+        if v not in {ShotLanguage.ZH, ShotLanguage.EN}:
             raise ValueError("language must be one of: 'zh', 'en'")
         return v
 
@@ -514,7 +514,7 @@ def get_batch_result(batch_id: str):
 @router.get("/status/{task_id}", response_model=ProcessingStatus)
 def get_task_status(task_id: str):
     """
-    获取任务状态
+    获取任务状态（增强版）
 
     - **task_id**: 任务ID
     """
@@ -527,6 +527,39 @@ def get_task_status(task_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"任务不存在: {task_id}"
         )
+
+    # 获取详细进度信息
+    task = factory.task_manager.get_task(task_id)
+    if task:
+        # 添加当前阶段
+        current_stage_code = task.get("current_stage")
+        if current_stage_code:
+            task_status.current_stage = current_stage_code
+
+            # 获取阶段中文名称
+            stage = TaskStage.from_code(current_stage_code)
+            if stage:
+                task_status.stage_name = stage.name
+
+        # 添加阶段进度详情
+        progress_details = task.get("progress_details")
+        if progress_details:
+            # 转换阶段代码为中文名称
+            formatted_details = {}
+            for stage_code, detail in progress_details.items():
+                stage = TaskStage.from_code(stage_code)
+                if stage:
+                    formatted_details[stage.name] = {
+                        "code": stage_code,
+                        "progress": detail.get("progress", 0),
+                        "status": detail.get("status", "pending"),
+                        "started_at": detail.get("started_at"),
+                        "completed_at": detail.get("completed_at"),
+                        "details": detail.get("details")
+                    }
+                else:
+                    formatted_details[stage_code] = detail
+            task_status.stages_progress = formatted_details
 
     return task_status
 
