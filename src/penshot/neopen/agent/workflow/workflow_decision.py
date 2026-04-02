@@ -491,7 +491,6 @@ class PipelineDecision:
             warning(f"发现{len(issues)}个连续性问题，但严重性未知")
             return PipelineState.VALID
 
-
     def decide_after_error(self, state: WorkflowState) -> PipelineState:
         """错误处理后的决策
 
@@ -499,9 +498,10 @@ class PipelineDecision:
         1. 检查是否超过重试次数
         2. 分析错误类型
         3. 根据错误类型决定下一步
+        4. 支持延迟重试机制
 
         错误类型分类：
-        - 网络/超时错误: 可以重试
+        - 网络/超时错误: 可以重试，可能需要延迟
         - 验证/无效错误: 可恢复错误
         - 配置错误: 需要修复
         - 其他错误: 普通失败
@@ -541,12 +541,108 @@ class PipelineDecision:
             info("错误需要人工干预")
             return PipelineState.NEEDS_HUMAN
 
-        # 检查延迟标志
+        # ========== 增强的延迟检查逻辑 ==========
+        # 1. 检查延迟标志（从recovery_flags获取）
         if hasattr(state, 'recovery_flags') and state.recovery_flags.get('need_delay', False):
             delay_seconds = state.recovery_flags.get('delay_seconds', 5)
-            warning(f"错误处理建议延迟 {delay_seconds} 秒后重试")
-            # 在实际实现中，这里可以添加实际的延迟逻辑
-            # 暂时返回 RETRY，由工作流调度器处理延迟
+            max_delay = state.recovery_flags.get('max_delay', 60)
+            delay_count = state.recovery_flags.get('delay_count', 0)
+            total_delay = state.recovery_flags.get('total_delay', 0)
+
+            # 检查是否超过最大延迟时间
+            if total_delay + delay_seconds > max_delay:
+                warning(f"延迟总时间将超过限制: {total_delay + delay_seconds}/{max_delay}秒")
+                return PipelineState.NEEDS_HUMAN
+
+            # 更新延迟计数
+            state.recovery_flags['delay_count'] = delay_count + 1
+            state.recovery_flags['total_delay'] = total_delay + delay_seconds
+
+            # 检查延迟次数限制
+            max_delay_count = state.recovery_flags.get('max_delay_count', 3)
+            if delay_count + 1 >= max_delay_count:
+                warning(f"延迟次数已达上限: {delay_count + 1}/{max_delay_count}")
+                return PipelineState.NEEDS_HUMAN
+
+            # 动态调整延迟时间（指数退避）
+            if delay_count > 0:
+                delay_seconds = min(delay_seconds * 2, max_delay - total_delay)
+                state.recovery_flags['delay_seconds'] = delay_seconds
+
+            info(f"错误处理建议延迟 {delay_seconds} 秒后重试 (第{delay_count + 1}次延迟)")
+
+            # 执行实际延迟（使用 asyncio.sleep 或 time.sleep）
+            import asyncio
+            import time
+
+            # 检测是否在事件循环中运行
+            try:
+                loop = asyncio.get_running_loop()
+                # 异步环境
+                future = asyncio.ensure_future(self._execute_delay(delay_seconds))
+                # 注意：这里不能直接阻塞，返回RETRY并设置延迟标志
+                # 实际延迟由调度器处理
+            except RuntimeError:
+                # 同步环境
+                info(f"同步环境中执行延迟 {delay_seconds} 秒...")
+                time.sleep(delay_seconds)
+
+            return PipelineState.RETRY
+
+        # 2. 检查错误类型相关的延迟需求
+        error_messages = state.error_messages
+        if error_messages:
+            last_error = error_messages[-1] if error_messages else ""
+            error_lower = last_error.lower()
+
+            # 根据错误类型判断是否需要延迟
+            delay_needed = False
+            delay_seconds = 0
+
+            # 网络相关错误
+            if any(keyword in error_lower for keyword in ['timeout', 'connection', 'network', 'socket', 'http', 'request failed']):
+                delay_needed = True
+                delay_seconds = 3
+                info(f"检测到网络/超时错误，需要延迟 {delay_seconds} 秒后重试")
+
+            # API限流错误
+            elif any(keyword in error_lower for keyword in ['rate limit', 'too many requests', '429', 'quota']):
+                delay_needed = True
+                delay_seconds = 10
+                info(f"检测到API限流错误，需要延迟 {delay_seconds} 秒后重试")
+
+            # 资源繁忙错误
+            elif any(keyword in error_lower for keyword in ['busy', 'resource', 'locked', 'conflict']):
+                delay_needed = True
+                delay_seconds = 2
+                info(f"检测到资源繁忙错误，需要延迟 {delay_seconds} 秒后重试")
+
+            # 服务不可用错误
+            elif any(keyword in error_lower for keyword in ['unavailable', 'service', '503', '502', '500']):
+                delay_needed = True
+                delay_seconds = 5
+                info(f"检测到服务不可用错误，需要延迟 {delay_seconds} 秒后重试")
+
+            if delay_needed:
+                # 初始化 recovery_flags（如果不存在）
+                if not hasattr(state, 'recovery_flags'):
+                    state.recovery_flags = {}
+
+                state.recovery_flags['need_delay'] = True
+                state.recovery_flags['delay_seconds'] = delay_seconds
+                state.recovery_flags['delay_reason'] = f"错误类型: {last_error[:100]}"
+
+                # 执行延迟
+                try:
+                    import asyncio
+                    loop = asyncio.get_running_loop()
+                    asyncio.ensure_future(self._execute_delay(delay_seconds))
+                except RuntimeError:
+                    import time
+                    info(f"同步环境中执行延迟 {delay_seconds} 秒...")
+                    time.sleep(delay_seconds)
+
+                return PipelineState.RETRY
 
         # 检查修复标志
         if hasattr(state, 'recovery_flags') and state.recovery_flags.get('need_repair', False):
@@ -579,6 +675,13 @@ class PipelineDecision:
         # 最后的选择：重试
         info("尝试重试流程")
         return PipelineState.RETRY
+
+    async def _execute_delay(self, delay_seconds: float):
+        """异步执行延迟（辅助方法）"""
+        import asyncio
+        info(f"异步延迟执行 {delay_seconds} 秒...")
+        await asyncio.sleep(delay_seconds)
+        info(f"异步延迟结束，继续执行")
 
 
     def decide_next_after_error(self, graph_state: WorkflowState) -> str:
