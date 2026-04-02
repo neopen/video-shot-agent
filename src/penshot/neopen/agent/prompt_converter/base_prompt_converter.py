@@ -67,7 +67,7 @@ class BasePromptConverter(ABC):
         base_template = "{description}, {style} style"
 
         # 获取风格
-        style = self.config.default_style
+        style = self.config.default_style.value
 
         # 构建描述
         description = fragment.description or f"视频片段 {fragment.id}"

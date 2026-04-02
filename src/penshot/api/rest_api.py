@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
 from penshot.logger import info, error, log_with_context
+from penshot.neopen.agent.base_models import VideoStyle
 from penshot.neopen.shot_config import ShotConfig
 from penshot.neopen.shot_context import script_id_ctx
 from penshot.neopen.shot_language import set_language, ShotLanguage
@@ -61,7 +62,7 @@ class ProcessRequest(BaseModel):
     - `script_id` 使用生成器作为默认值。
     """
     script: str = Field(..., min_length=1, description="原始剧本文本")
-    style: str = Field(default="realistic", min_length=1, description="原始剧本文本")
+    style: VideoStyle = Field(default=VideoStyle.REALISTIC, min_length=1, description="视频风格")
     config: Optional[ShotConfig] = Field(default_factory=ShotConfig, description="处理配置（序列化形式）")
     callback_url: Optional[str] = Field(default=None, description="回调URL，处理完成后通知（可选）")
     script_id: Optional[str] = Field(default=None, description="剧本ID：如果是属于同一个剧本的不同请求，可以使用相同的ID，否则就是不同（可选）")

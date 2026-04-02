@@ -14,6 +14,7 @@ from typing import Optional, List, Dict, Any, Callable
 from concurrent.futures import Future, TimeoutError
 
 from penshot.logger import info, error, debug
+from penshot.neopen.agent.base_models import VideoStyle
 from penshot.neopen.shot_config import ShotConfig
 from penshot.neopen.shot_language import ShotLanguage
 from penshot.neopen.task.task_manager import TaskManager
@@ -97,7 +98,7 @@ class TaskFactory:
             self,
             script: str,
             script_id: Optional[str] = None,
-            style: Optional[str] = None,
+            style: Optional[VideoStyle] = None,
             config: Optional[ShotConfig] = None,
             language: ShotLanguage = None,
             priority: TaskPriority = TaskPriority.NORMAL,

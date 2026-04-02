@@ -185,7 +185,7 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
 
     def _fix_style_consistency(self, instructions: AIVideoInstructions) -> AIVideoInstructions:
         """修复风格一致性"""
-        default_style = self.config.default_style
+        default_style = self.config.default_style.value
         for prompt in instructions.fragments:
             if prompt.style and prompt.style != default_style:
                 old_style = prompt.style
@@ -320,7 +320,7 @@ class LLMPromptConverter(BasePromptConverter, BaseLLMAgent):
             location=fragment.continuity_notes.get("location", ""),
             original_language=original_language,
             dm_model=self.config.video_model,
-            video_style=self.config.default_style,
+            video_style=self.config.default_style.value,
             max_length=self.config.max_prompt_length,
             min_length=self.config.min_prompt_length,
             global_context=global_context,

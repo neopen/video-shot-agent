@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, List, Any, Callable
 
 from penshot.logger import log_with_context, info, error
+from penshot.neopen.agent.base_models import VideoStyle
 from penshot.neopen.shot_config import ShotConfig
 from penshot.neopen.shot_language import ShotLanguage, set_language
 from penshot.neopen.task.task_factory import create_task_factory, TaskFactory, TaskResponse, TaskPriority
@@ -144,6 +145,7 @@ class PenshotFunction:
             self,
             script_text: str,
             script_id: Optional[str] = None,
+            style: Optional[VideoStyle] = None,
             language: Optional[ShotLanguage] = None,
             callback: Optional[Callable] = None,
             priority: TaskPriority = TaskPriority.NORMAL
@@ -153,6 +155,7 @@ class PenshotFunction:
 
         Args:
             script_text: 剧本文本
+            style: 视频风格
             script_id: 剧本ID：如果是属于同一个剧本的不同请求，可以使用相同的ID，否则就是不同（可选）
             language: 输出语言
             callback: 任务完成回调函数
@@ -203,6 +206,7 @@ class PenshotFunction:
         task_id = self.task_factory.submit(
             script_id=script_id,
             script=script_text,
+            style=style,
             config=self.config,
             language=lang,
             priority=priority,

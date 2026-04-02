@@ -22,6 +22,7 @@ from threading import RLock
 from typing import Optional, Dict, Any, List
 
 from penshot.logger import info, error, warning, debug
+from penshot.neopen.agent.base_models import VideoStyle
 # if TYPE_CHECKING:
 from penshot.neopen.agent.workflow.workflow_pipeline import MultiAgentPipeline
 from penshot.neopen.shot_config import ShotConfig
@@ -157,18 +158,20 @@ class TaskManager:
         return f"penshot:tasks:metrics:{name}"
 
     # ---------------------- core operations ----------------------
-    def create_task(self, script: str, script_id: Optional[str] = None, style: Optional[str] = None, config: Optional[ShotConfig] = None) -> str:
+    def create_task(self, script: str, script_id: Optional[str] = None, style: Optional[VideoStyle] = None, config: Optional[ShotConfig] = None) -> str:
         if not isinstance(script, str) or not script.strip():
             raise ValueError("script must be a non-empty string")
         script_id = script_id or self._generate_script_id(script)
         task_id = self._generate_task_id(script_id)
+        shot_config = config or ShotConfig()
+        if style:
+            shot_config.default_style = style
 
         record = {
             "task_id": task_id,
             "script_id": script_id,
-            "style": style,
             "script": script,
-            "config": config,
+            "config": shot_config,
             "status": TaskStatus.PENDING,
             "stage": TaskStage.INIT.code,
             "progress": 0,

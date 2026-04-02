@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Optional, Callable
 
 from penshot.logger import info, warning, error, debug
+from penshot.neopen.agent.base_models import VideoStyle
 from penshot.neopen.shot_config import ShotConfig
 from penshot.neopen.task.task_handler import CallbackHandler
 from penshot.neopen.task.task_manager import TaskManager
@@ -408,7 +409,7 @@ class AsyncTaskProcessor:
             self,
             batch_id: str,
             scripts: List[str],
-            style: Optional[str] = None,
+            style: Optional[VideoStyle] = None,
             config: Optional[ShotConfig] = None,
             priority: TaskPriority = TaskPriority.NORMAL
     ) -> Dict:

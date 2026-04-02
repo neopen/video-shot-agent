@@ -504,7 +504,7 @@ class PromptConverterAgent(BaseRepairableAgent[AIVideoInstructions, FragmentSequ
         # ========== 4. 修复风格不一致 ==========
         if style_issues:
             # 统一使用默认风格
-            default_style = self.config.default_style
+            default_style = self.config.default_style.value
             for prompt in instructions.fragments:
                 if prompt.style and prompt.style != default_style:
                     old_style = prompt.style
