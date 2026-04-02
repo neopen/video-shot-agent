@@ -589,10 +589,16 @@ class PipelineDecision:
         # 2. 根据决策决定下一个节点
         if decision_state == PipelineState.VALID:
             # 可恢复错误，根据错误来源决定重试节点
-            return self._get_retry_node_based_on_error_source(graph_state, PipelineState.VALID)
+            retry_node = self._get_retry_node_based_on_error_source(graph_state, PipelineState.VALID)
+            # 增加重试计数
+            self._increment_stage_retry(graph_state, retry_node)
+            return retry_node.value
         elif decision_state == PipelineState.RETRY:
             # 需要重试，根据错误来源决定重试节点
-            return self._get_retry_node_based_on_error_source(graph_state, PipelineState.RETRY)
+            retry_node = self._get_retry_node_based_on_error_source(graph_state, PipelineState.RETRY)
+            # 增加重试计数
+            self._increment_stage_retry(graph_state, retry_node)
+            return retry_node.value
         elif decision_state == PipelineState.NEEDS_REPAIR:
             # 需要修复，通常回到提示词生成
             return PipelineNode.CONVERT_PROMPT.value
@@ -605,7 +611,10 @@ class PipelineDecision:
         else:
             # 默认情况，重新开始
             warning(f"未知错误决策: {decision_state}，默认回到剧本解析")
-            return PipelineNode.PARSE_SCRIPT.value
+            retry_node = PipelineNode.PARSE_SCRIPT
+            # 增加重试计数
+            self._increment_stage_retry(graph_state, retry_node)
+            return retry_node.value
 
 
     def decide_after_human(self, state: WorkflowState) -> PipelineState:
@@ -745,7 +754,7 @@ class PipelineDecision:
             return retry_mapping[last_node]
         else:
             # 默认回到剧本解析重新开始
-            info(f"未知错误来源 {last_node}，回到剧本解析重新开始")
+            warning(f"未知错误来源 {last_node}，回到剧本解析重新开始")
             return PipelineNode.PARSE_SCRIPT
 
     def _can_retry_stage(self, state: WorkflowState, stage_node: PipelineNode) -> Tuple[bool, str]:

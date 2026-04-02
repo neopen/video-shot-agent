@@ -1279,6 +1279,7 @@ class WorkflowNodes:
             "system": ["system", "os", "kernel", "fatal", "critical", "segmentation"],
             "data": ["data", "corrupt", "missing", "empty", "null"],
             "loop": ["循环", "loop", "exceeded", "超过限制"],
+            "auth": ["401", "unauthorized", "authentication", "api-key", "apikey", "invalid api"],
             "unknown": ["unknown", "未定义", "不明"],
         }
 
@@ -1311,6 +1312,10 @@ class WorkflowNodes:
         if type_counts.get("system", 0) > 0 or type_counts.get("fatal", 0) > 0:
             analysis["suggested_action"] = "abort"
             analysis["can_recover"] = False
+        elif type_counts.get("auth", 0) > 0:
+            # 认证错误（如401）需要人工干预
+            analysis["suggested_action"] = "human_intervention"
+            analysis["can_recover"] = False
         elif type_counts.get("loop", 0) > 0:
             analysis["suggested_action"] = "human_intervention"
             analysis["can_recover"] = False
@@ -1336,6 +1341,13 @@ class WorkflowNodes:
         Returns:
             str: 恢复行动类型
         """
+        # 检查是否超过30分钟超时
+        if hasattr(state, 'workflow_start_time'):
+            elapsed_time = time.time() - state.workflow_start_time
+            if elapsed_time > 1800:  # 30分钟 = 1800秒
+                warning(f"工作流执行超时: {elapsed_time:.1f}秒，超过30分钟限制")
+                return "abort"
+        
         # 检查循环限制
         if getattr(state, 'global_loop_exceeded', False):
             return "abort"

@@ -5,6 +5,7 @@
 @Github: https://github.com/neopen/video-shot-agent
 @Time: 2025/10 - 2025/11
 """
+import time
 import uuid
 from dataclasses import field
 from datetime import datetime
@@ -115,6 +116,7 @@ class NodeLoopState(BaseModel):
     total_retries: int = 0  # 全局重试统计
     node_loop_details: list = []  # 每个节点的循环详情日志
     recovery_flags: Dict[str, Any] = {}  # 每个节点的恢复标记
+    workflow_start_time: float = time.time()  # 工作流开始时间戳
 
 
 class WorkflowState(InputState, ScriptParsingState, ShotGeneratorState, NodeLoopState,
