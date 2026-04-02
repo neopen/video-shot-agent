@@ -172,7 +172,7 @@ class TaskManager:
         task_id = self._generate_task_id(script_code)
         shot_config = config or ShotConfig()
         if style:
-            shot_config.default_style = style
+            shot_config.default_style = style.value
 
         record = {
             "task_id": task_id,
