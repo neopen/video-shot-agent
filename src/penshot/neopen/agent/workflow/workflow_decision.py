@@ -444,12 +444,26 @@ class PipelineDecision:
             state.error_messages.append(f"连续性检查节点循环检查失败: {loop_reason}")
             return loop_decision
 
+        # ========== 检查连续性重试次数 ==========
+        # 初始化连续性重试计数（如果不存在）
+        if not hasattr(state, 'continuity_retry_count'):
+            state.continuity_retry_count = 0
+
+        max_continuity_retries = getattr(state, 'max_continuity_retries', 3)
+
         # 获取连续性问题
-        issues = getattr(state, 'continuity_issues', [])  # 使用 getattr 避免属性不存在
+        issues = getattr(state, 'continuity_issues', [])
+
+        # 如果有问题且超过重试次数，需要人工干预
+        if issues and state.continuity_retry_count >= max_continuity_retries:
+            warning(f"连续性检查重试次数已达上限: {state.continuity_retry_count}/{max_continuity_retries}，需要人工干预")
+            return PipelineState.NEEDS_HUMAN
 
         # 检查是否有连续性问题
         if not issues:
-            # 没有连续性问题，可以直接生成输出
+            # 没有连续性问题，重置重试计数
+            state.continuity_retry_count = 0
+            # 可以直接生成输出
             return PipelineState.SUCCESS
 
         # 根据问题严重性分类（兼容不同格式）
@@ -473,8 +487,13 @@ class PipelineDecision:
             elif severity == "minor" or severity == "MINOR":
                 minor_issues.append(issue)
             else:
-                # 默认归类为中度
-                moderate_issues.append(issue)
+                # 默认归类为轻微
+                minor_issues.append(issue)
+
+        # ========== 增加重试计数 ==========
+        state.continuity_retry_count += 1
+        info(f"连续性检查第 {state.continuity_retry_count}/{max_continuity_retries} 次重试，"
+             f"发现严重:{len(critical_issues)}, 中度:{len(moderate_issues)}, 轻微:{len(minor_issues)}")
 
         if critical_issues:
             warning(f"发现{len(critical_issues)}个严重连续性问题")
@@ -483,9 +502,14 @@ class PipelineDecision:
             return PipelineState.NEEDS_REPAIR
         elif moderate_issues:
             warning(f"发现{len(moderate_issues)}个中度连续性问题")
+            # 如果已经重试过多次，考虑人工干预
+            if state.continuity_retry_count >= max_continuity_retries - 1:
+                warning(f"中度问题持续存在，已达重试上限，{state.continuity_retry_count} 次")
+                return PipelineState.NEEDS_HUMAN
             return PipelineState.NEEDS_REPAIR
         elif minor_issues:
             warning(f"发现{len(minor_issues)}个轻微连续性问题")
+            # 轻微问题可以继续
             return PipelineState.VALID
         else:
             warning(f"发现{len(issues)}个连续性问题，但严重性未知")
