@@ -45,15 +45,15 @@ pip install dashscope
 ```properties
 ########################## LLM CONFIG #########################
 # Supported providers (openai, qwen, deepseek, ollama).
-LLM__DEFAULT__BASE_URL=https://api.openai.com/v1
-LLM__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-LLM__DEFAULT__MODEL_NAME=gpt-4
+PENSHOT_LLM__DEFAULT__BASE_URL=https://api.openai.com/v1
+PENSHOT_LLM__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+PENSHOT_LLM__DEFAULT__MODEL_NAME=gpt-4
 
 # ================ Embedding config ================
 # Supported providers（openai, qwen, HuggingFace, ollama）
-EMBED__DEFAULT__BASE_URL=https://api.openai.com/v1
-EMBED__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-EMBED__DEFAULT__MODEL_NAME=text-embedding-v4
+PENSHOT_EMBED__DEFAULT__BASE_URL=https://api.openai.com/v1
+PENSHOT_EMBED__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+PENSHOT_EMBED__DEFAULT__MODEL_NAME=text-embedding-v4
 ```
 
 ## 使用方式
@@ -162,22 +162,6 @@ python -m penshot.mcp_server --max-concurrent 5 --queue-size 500
 #### Python MCP 客户端示例
 
 ```python
-"""
-@FileName: mcp_client.py
-@Description: MCP Client 测试脚本 - Windows 兼容版
-@Author: HiPeng
-@Github: https://github.com/neopen/video-shot-agent
-@Time: 2026/3/30
-"""
-
-import json
-import re
-import subprocess
-import sys
-import time
-from typing import Optional
-
-
 class MCPClient:
     """MCP 客户端 - 同步版本，Windows 兼容"""
 

@@ -58,14 +58,12 @@ flowchart TD
 ### 1. 环境准备
 
 ```bash
-# 克隆项目
-git clone https://github.com/neopen/video-shot-agent.git
-cd video-shot-agent
-
 # 方式 A：直接安装 PyPI 包（推荐）
 pip install penshot
 
 # 方式 B：开发模式安装（源码）
+git clone https://github.com/neopen/video-shot-agent.git
+cd video-shot-agent
 pip install -e .
 ```
 
@@ -79,15 +77,15 @@ cp .env.example .env
 
 ```properties
 ########################## LLM 模型配置 #########################
-LLM__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
-LLM__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-LLM__DEFAULT__MODEL_NAME=qwen-plus
-LLM__DEFAULT__TIMEOUT=30
+PENSHOT_LLM__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
+PENSHOT_LLM__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+PENSHOT_LLM__DEFAULT__MODEL_NAME=qwen-plus
+PENSHOT_LLM__DEFAULT__TIMEOUT=30
 
 ########################## 嵌入模型配置 #########################
-EMBED__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
-EMBED__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-EMBED__DEFAULT__MODEL_NAME=text-embedding-v4
+PENSHOT_EMBED__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
+PENSHOT_EMBED__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+PENSHOT_EMBED__DEFAULT__MODEL_NAME=text-embedding-v4
 ```
 
 ### 3. 启动服务

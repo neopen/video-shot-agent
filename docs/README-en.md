@@ -57,14 +57,12 @@ This system is a typical Natural Language Processing (NLP) application that achi
 ### 1. Environment Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/neopen/video-shot-agent.git
-cd video-shot-agent
-
 # Option A: Install via PyPI (Recommended)
 pip install penshot
 
 # Option B: Install in editable mode (from source)
+git clone https://github.com/neopen/video-shot-agent.git
+cd video-shot-agent
 pip install -e .
 ```
 
@@ -80,15 +78,15 @@ Edit the `.env` file to configure the required LLM and Embedding parameters:
 
 ```properties
 ########################## LLM Configuration #########################
-LLM__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
-LLM__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-LLM__DEFAULT__MODEL_NAME=qwen-plus
-LLM__DEFAULT__TIMEOUT=30
+PENSHOT_LLM__DEFAULT__BASE_URL=https://api.openai.com/v1
+PENSHOT_LLM__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+PENSHOT_LLM__DEFAULT__MODEL_NAME=gpt-4o
+PENSHOT_LLM__DEFAULT__TIMEOUT=30
 
 ########################## Embedding Model Configuration #########################
-EMBED__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
-EMBED__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-EMBED__DEFAULT__MODEL_NAME=text-embedding-v4
+PENSHOT_EMBED__DEFAULT__BASE_URL=https://api.openai.com/v1
+PENSHOT_EMBED__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+PENSHOT_EMBED__DEFAULT__MODEL_NAME=text-embedding-v4
 ```
 
 ### 3. Start the Service
