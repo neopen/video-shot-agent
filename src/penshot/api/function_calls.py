@@ -11,7 +11,7 @@ import threading
 from dataclasses import dataclass
 from typing import Dict, Optional, List, Any, Callable
 
-from penshot.logger import log_with_context, info, error
+from penshot.logger import info, error
 from penshot.neopen.agent.base_models import VideoStyle
 from penshot.neopen.shot_config import ShotConfig
 from penshot.neopen.shot_language import ShotLanguage, set_language
@@ -217,7 +217,6 @@ class PenshotFunction:
             callback=_internal_callback
         )
 
-        log_with_context("INFO", f"任务已提交: {task_id}", {"priority": priority.name})
         return task_id
 
     def _on_task_complete(self, task_id: str, task_response: TaskResponse):

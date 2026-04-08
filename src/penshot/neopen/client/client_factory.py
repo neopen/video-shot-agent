@@ -101,7 +101,7 @@ def _get_default_llm(ai_config: LLMBaseConfig, **kwargs) -> BaseLanguageModel:
     """
     # 获取配置
     provider = detect_ai_provider_by_url(ai_config.base_url)
-    info(f"使用AI提供商: {provider}, 模型: {ai_config.model_name}")
+    info(f"使用AI提供商: {provider}, 大语言模型: {ai_config.model_name}")
 
     config = AIConfig(llm=ai_config)
 
