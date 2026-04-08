@@ -498,19 +498,19 @@ class MultiAgentPipeline:
             debug("开始增强的工作流执行...")
 
             # 方法A：使用修复器实例（推荐）
-            final_result = await self.output_fixer.enhanced_workflow_invoke(
-                self.workflow,
-                initial_state
-            )
+            # final_result = await self.output_fixer.enhanced_workflow_invoke(
+            #     self.workflow,
+            #     initial_state
+            # )
 
             # 使用 asyncio.wait_for 设置超时
-            # final_result = await asyncio.wait_for(
-            #     self.output_fixer.enhanced_workflow_invoke(
-            #         self.workflow,
-            #         initial_state
-            #     ),
-            #     timeout=initial_state.timeout
-            # )
+            final_result = await asyncio.wait_for(
+                self.output_fixer.enhanced_workflow_invoke(
+                    self.workflow,
+                    initial_state
+                ),
+                timeout=initial_state.timeout
+            )
 
             # 方法B：如果修复器需要调整配置
             # config_dict = {"configurable": {"thread_id": f"process_{id(initial_state)}"}}

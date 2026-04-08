@@ -671,11 +671,10 @@ class PipelineDecision:
         info("尝试重试流程")
         return PipelineState.NEEDS_RETRY
 
-
     def decide_next_after_error(self, graph_state: WorkflowState) -> str:
         """错误处理后决定下一个节点"""
         # 1. 先调用决策函数获取错误处理决策
-        decision_state = self.decide_after_error(graph_state)
+        decision_state = self.decide_after_error(graph_state)  # 返回 PipelineState 枚举
 
         # 2. 根据决策决定下一个节点
         if decision_state == PipelineState.VALID:
@@ -683,29 +682,34 @@ class PipelineDecision:
             retry_node = self._get_retry_node_based_on_error_source(graph_state, PipelineState.VALID)
             # 增加重试计数
             self._increment_stage_retry(graph_state, retry_node)
-            return retry_node.value
+            return retry_node.value  # ← 已经转换为字符串
+
         elif decision_state == PipelineState.NEEDS_RETRY:
             # 需要重试，根据错误来源决定重试节点
             retry_node = self._get_retry_node_based_on_error_source(graph_state, PipelineState.NEEDS_RETRY)
             # 增加重试计数
             self._increment_stage_retry(graph_state, retry_node)
-            return retry_node.value
+            return retry_node.value  # ← 已经转换为字符串
+
         elif decision_state == PipelineState.NEEDS_REPAIR:
             # 需要修复，通常回到提示词生成
-            return PipelineNode.CONVERT_PROMPT.value
+            return PipelineNode.CONVERT_PROMPT.value  # ← 已经转换为字符串
+
         elif decision_state == PipelineState.NEEDS_HUMAN:
             # 需要人工干预
-            return PipelineNode.HUMAN_INTERVENTION.value
+            return PipelineNode.HUMAN_INTERVENTION.value  # ← 已经转换为字符串
+
         elif decision_state == PipelineState.ABORT:
             # 中止流程
-            return END
+            return END  # ← 直接返回 END
+
         else:
             # 默认情况，重新开始
             warning(f"未知错误决策: {decision_state}，默认回到剧本解析")
             retry_node = PipelineNode.PARSE_SCRIPT
             # 增加重试计数
             self._increment_stage_retry(graph_state, retry_node)
-            return retry_node.value
+            return retry_node.value  # ← 已经转换为字符串
 
     def decide_after_human(self, state: WorkflowState) -> PipelineState:
         """人工干预后的决策
