@@ -51,7 +51,7 @@ class PipelineState(str, Enum):
     NEEDS_REPAIR = "needs_repair"  # 需要修复/调整/优化
 
     # 重试状态
-    RETRY = "retry"  # 需要重试
+    NEEDS_RETRY = "needs_retry"  # 需要重试
 
     # 人工状态
     NEEDS_HUMAN = "needs_human"  # 需要人工干预

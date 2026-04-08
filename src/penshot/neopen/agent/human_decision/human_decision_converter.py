@@ -83,7 +83,7 @@ class HumanDecisionConverter:
     STANDARD_TO_STATE_MAP = {
         "CONTINUE": PipelineState.SUCCESS,
         "APPROVE": PipelineState.SUCCESS,
-        "RETRY": PipelineState.RETRY,
+        "RETRY": PipelineState.NEEDS_RETRY,
         "REPAIR": PipelineState.NEEDS_REPAIR,
         "ESCALATE": PipelineState.NEEDS_HUMAN,
         "ABORT": PipelineState.ABORT
@@ -179,7 +179,7 @@ class HumanDecisionConverter:
                 return False
 
         # 检查是否需要重试但已超重试次数
-        if context and decision_state == PipelineState.RETRY:
+        if context and decision_state == PipelineState.NEEDS_RETRY:
             retry_count = context.get("retry_count", 0)
             max_retries = context.get("max_retries", 3)
             if retry_count >= max_retries:
@@ -201,7 +201,7 @@ class HumanDecisionConverter:
             PipelineState.SUCCESS: "继续流程",
             PipelineState.VALID: "验证通过",
             PipelineState.NEEDS_REPAIR: "修复问题",
-            PipelineState.RETRY: "重新开始",
+            PipelineState.NEEDS_RETRY: "重新开始",
             PipelineState.NEEDS_HUMAN: "需要人工干预",
             PipelineState.FAILED: "处理失败",
             PipelineState.ABORT: "中止流程",

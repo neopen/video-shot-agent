@@ -101,7 +101,7 @@ class EnhancedHumanDecisionConverter(HumanDecisionConverter):
         impacts = {
             PipelineState.SUCCESS: "继续生成最终视频",
             PipelineState.VALID: "验证通过，继续生成最终视频",
-            PipelineState.RETRY: "重新开始处理流程",
+            PipelineState.NEEDS_RETRY: "重新开始处理流程",
             PipelineState.NEEDS_REPAIR: "修复问题后继续处理",
             PipelineState.NEEDS_HUMAN: "等待进一步人工决策",
             PipelineState.FAILED: "处理失败，进入错误处理",
@@ -112,7 +112,7 @@ class EnhancedHumanDecisionConverter(HumanDecisionConverter):
         next_steps = {
             PipelineState.SUCCESS: "进入生成输出阶段",
             PipelineState.VALID: "进入生成输出阶段",
-            PipelineState.RETRY: "重新开始流程（从剧本解析开始）",
+            PipelineState.NEEDS_RETRY: "重新开始流程（从剧本解析开始）",
             PipelineState.NEEDS_REPAIR: "根据具体问题进入相应修复阶段",
             PipelineState.NEEDS_HUMAN: "等待人工进一步决策",
             PipelineState.FAILED: "进入错误处理阶段",
@@ -239,7 +239,7 @@ class EnhancedHumanDecisionConverter(HumanDecisionConverter):
         retry_count = context.get("retry_count", 0)
         max_retries = context.get("max_retries", 3)
 
-        if decision_state == PipelineState.RETRY and retry_count >= max_retries:
+        if decision_state == PipelineState.NEEDS_RETRY and retry_count >= max_retries:
             validation_result["is_valid"] = False
             validation_result["warnings"].append(f"重试次数已耗尽 ({retry_count}/{max_retries})")
             validation_result["suggestions"].append("考虑使用NEEDS_REPAIR或NEEDS_HUMAN")

@@ -73,7 +73,7 @@ class PipelineDecision:
             if can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.PARSE_SCRIPT)
                 warning(f"剧本解析数据为空，{retry_reason}，准备重试")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 error(f"剧本解析数据为空，且{retry_reason}，需要人工干预")
                 return PipelineState.NEEDS_HUMAN
@@ -86,7 +86,7 @@ class PipelineDecision:
             if can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.PARSE_SCRIPT)
                 warning(f"剧本解析数据无效，{retry_reason}，准备重试")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 error(f"剧本解析数据无效，且{retry_reason}，需要人工干预")
                 return PipelineState.NEEDS_HUMAN
@@ -139,7 +139,7 @@ class PipelineDecision:
                 # 增加重试计数
                 state = self._increment_stage_retry(state, PipelineNode.SEGMENT_SHOT)
                 warning(f"镜头拆分，发现{len(short_shots)}个过短镜头，{retry_reason}")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 # 不能重试，需要修复
                 warning(f"镜头拆分，发现{len(short_shots)}个过短镜头，但{retry_reason}")
@@ -152,7 +152,7 @@ class PipelineDecision:
                 # 增加重试计数
                 state = self._increment_stage_retry(state, PipelineNode.SEGMENT_SHOT)
                 warning(f"镜头拆分，发现{len(long_shots)}个过长镜头，{retry_reason}")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 # 不能重试，需要修复
                 warning(f"镜头拆分，发现{len(long_shots)}个过长镜头，但{retry_reason}")
@@ -209,7 +209,7 @@ class PipelineDecision:
                 if can_retry:
                     state = self._increment_stage_retry(state, PipelineNode.SPLIT_VIDEO)
                     warning(f"AI分段后，发现{len(invalid_fragments)}个超长片段，{retry_reason}")
-                    return PipelineState.RETRY
+                    return PipelineState.NEEDS_RETRY
                 else:
                     warning(f"AI分段后，发现{len(invalid_fragments)}个超长片段，但{retry_reason}")
                     return PipelineState.NEEDS_REPAIR
@@ -275,7 +275,7 @@ class PipelineDecision:
             if can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.CONVERT_PROMPT)
                 warning(f"发现{len(empty_prompts)}个空提示词，{retry_reason}")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 warning(f"发现{len(empty_prompts)}个空提示词，但{retry_reason}")
                 return PipelineState.NEEDS_REPAIR
@@ -286,7 +286,7 @@ class PipelineDecision:
             if can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.CONVERT_PROMPT)
                 warning(f"发现{len(long_prompts)}个过长提示词，{retry_reason}")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 warning(f"发现{len(long_prompts)}个过长提示词，但{retry_reason}")
                 return PipelineState.NEEDS_REPAIR
@@ -297,7 +297,7 @@ class PipelineDecision:
             if can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.CONVERT_PROMPT)
                 warning(f"发现{len(short_prompts)}个过短提示词，{retry_reason}")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 warning(f"发现{len(short_prompts)}个过短提示词，但{retry_reason}")
                 return PipelineState.NEEDS_REPAIR
@@ -352,7 +352,7 @@ class PipelineDecision:
             if can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.AUDIT_QUALITY)
                 warning(f"审计报告为空，{retry_reason}")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 warning(f"审计报告为空，但{retry_reason}")
                 return PipelineState.FAILED
@@ -388,11 +388,11 @@ class PipelineDecision:
             elif report.score >= 60.0 and can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.AUDIT_QUALITY)
                 info(f"审计状态为 FAILED，分数 {report.score}% 中等，重试")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 if can_retry:
                     state = self._increment_stage_retry(state, PipelineNode.AUDIT_QUALITY)
-                    return PipelineState.RETRY
+                    return PipelineState.NEEDS_RETRY
                 else:
                     return PipelineState.NEEDS_REPAIR
 
@@ -412,16 +412,16 @@ class PipelineDecision:
             AuditStatus.MINOR_ISSUES: PipelineState.VALID,
             AuditStatus.MODERATE_ISSUES: PipelineState.NEEDS_REPAIR,
             AuditStatus.MAJOR_ISSUES: PipelineState.NEEDS_REPAIR,
-            AuditStatus.CRITICAL_ISSUES: PipelineState.RETRY if can_retry else PipelineState.NEEDS_HUMAN,
+            AuditStatus.CRITICAL_ISSUES: PipelineState.NEEDS_RETRY if can_retry else PipelineState.NEEDS_HUMAN,
             AuditStatus.NEEDS_HUMAN: PipelineState.NEEDS_HUMAN,
             AuditStatus.WARNING: PipelineState.VALID,
             AuditStatus.NEEDS_REVIEW: PipelineState.VALID,
         }
 
-        decision = decision_map.get(report.status, PipelineState.RETRY if can_retry else PipelineState.FAILED)
+        decision = decision_map.get(report.status, PipelineState.NEEDS_RETRY if can_retry else PipelineState.FAILED)
 
         # 如果决定重试，增加重试计数
-        if decision == PipelineState.RETRY:
+        if decision == PipelineState.NEEDS_RETRY:
             state = self._increment_stage_retry(state, PipelineNode.AUDIT_QUALITY)
             info(f"质量审查需要重试: 审计状态={report.status.value}, 已重试{state.stage_current_retries.get(PipelineNode.AUDIT_QUALITY, 0)}次")
 
@@ -482,7 +482,7 @@ class PipelineDecision:
             if can_retry and len(critical_issues) < 5:
                 state = self._increment_stage_retry(state, PipelineNode.CONTINUITY_CHECK)
                 warning(f"发现{len(critical_issues)}个严重问题，{retry_reason}，准备重试")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 warning(f"发现{len(critical_issues)}个严重问题，且{retry_reason}，需要人工干预")
                 return PipelineState.NEEDS_HUMAN
@@ -491,7 +491,7 @@ class PipelineDecision:
             if can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.CONTINUITY_CHECK)
                 warning(f"发现{len(moderate_issues)}个中度问题，{retry_reason}，准备重试")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 warning(f"发现{len(moderate_issues)}个中度问题，且{retry_reason}，需要人工干预")
                 return PipelineState.NEEDS_HUMAN
@@ -588,7 +588,7 @@ class PipelineDecision:
             info(f"执行延迟 {delay_seconds} 秒...")
             time.sleep(delay_seconds)
 
-            return PipelineState.RETRY
+            return PipelineState.NEEDS_RETRY
 
         # 2. 检查错误类型相关的延迟需求
         error_messages = state.error_messages
@@ -637,7 +637,7 @@ class PipelineDecision:
                 info(f"执行延迟 {delay_seconds} 秒...")
                 time.sleep(delay_seconds)
 
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
 
         # 检查修复标志
         if hasattr(state, 'recovery_flags') and state.recovery_flags.get('need_repair', False):
@@ -650,7 +650,7 @@ class PipelineDecision:
             elif repair_type == "configuration":
                 # 配置错误，可能需要调整后重试
                 info("需要修复配置问题")
-                return PipelineState.RETRY
+                return PipelineState.NEEDS_RETRY
             else:
                 # 一般修复
                 info(f"需要一般修复: {repair_type}")
@@ -659,7 +659,7 @@ class PipelineDecision:
         # 默认：如果可以恢复，重新开始流程
         if hasattr(state, 'recovery_flags') and state.recovery_flags.get('can_recover', True):
             info("错误可恢复，重新开始流程")
-            return PipelineState.RETRY
+            return PipelineState.NEEDS_RETRY
 
         # 检查重试次数限制
         total_retries = getattr(state, 'total_retries', 0)
@@ -669,7 +669,7 @@ class PipelineDecision:
 
         # 最后的选择：重试
         info("尝试重试流程")
-        return PipelineState.RETRY
+        return PipelineState.NEEDS_RETRY
 
 
     def decide_next_after_error(self, graph_state: WorkflowState) -> str:
@@ -684,9 +684,9 @@ class PipelineDecision:
             # 增加重试计数
             self._increment_stage_retry(graph_state, retry_node)
             return retry_node.value
-        elif decision_state == PipelineState.RETRY:
+        elif decision_state == PipelineState.NEEDS_RETRY:
             # 需要重试，根据错误来源决定重试节点
-            retry_node = self._get_retry_node_based_on_error_source(graph_state, PipelineState.RETRY)
+            retry_node = self._get_retry_node_based_on_error_source(graph_state, PipelineState.NEEDS_RETRY)
             # 增加重试计数
             self._increment_stage_retry(graph_state, retry_node)
             return retry_node.value

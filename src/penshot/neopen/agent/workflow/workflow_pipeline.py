@@ -142,7 +142,7 @@ class MultiAgentPipeline:
                 PipelineState.SUCCESS: PipelineNode.LOOP_CHECK,  # 下一步：循环检查 -> AI分段
 
                 # 拆分需要重试（如过长镜头过多、临时问题）
-                PipelineState.RETRY: PipelineNode.SEGMENT_SHOT,  # 下一步：重试当前节点（镜头拆分）
+                PipelineState.NEEDS_RETRY: PipelineNode.SEGMENT_SHOT,  # 下一步：重试当前节点（镜头拆分）
 
                 # 拆分需要修复/调整（如参数不合理）
                 PipelineState.NEEDS_REPAIR: PipelineNode.SEGMENT_SHOT,  # 下一步：修复后重试当前节点
@@ -164,7 +164,7 @@ class MultiAgentPipeline:
                 PipelineState.NEEDS_REPAIR: PipelineNode.SPLIT_VIDEO,  # 下一步：修复后重试当前节点（AI分段）
 
                 # 分段需要重试（如临时问题）
-                PipelineState.RETRY: PipelineNode.SPLIT_VIDEO,  # 下一步：重试当前节点
+                PipelineState.NEEDS_RETRY: PipelineNode.SPLIT_VIDEO,  # 下一步：重试当前节点
 
                 # 分段遇到严重错误，进入错误处理
                 PipelineState.FAILED: PipelineNode.ERROR_HANDLER,  # 下一步：错误处理
@@ -189,7 +189,7 @@ class MultiAgentPipeline:
                 PipelineState.NEEDS_REPAIR: PipelineNode.CONVERT_PROMPT,  # 下一步：修复提示词
 
                 # 生成需要重试（如临时问题）
-                PipelineState.RETRY: PipelineNode.CONVERT_PROMPT,  # 下一步：重试提示词生成
+                PipelineState.NEEDS_RETRY: PipelineNode.CONVERT_PROMPT,  # 下一步：重试提示词生成
 
                 # 生成遇到严重错误，进入错误处理
                 PipelineState.FAILED: PipelineNode.ERROR_HANDLER  # 下一步：错误处理
@@ -228,7 +228,7 @@ class MultiAgentPipeline:
                 PipelineState.NEEDS_REPAIR: PipelineNode.CONVERT_PROMPT,  # 下一步：修复提示词
 
                 # 审查需要重试（如临时问题）
-                PipelineState.RETRY: PipelineNode.CONVERT_PROMPT,  # 下一步：重试提示词生成
+                PipelineState.NEEDS_RETRY: PipelineNode.CONVERT_PROMPT,  # 下一步：重试提示词生成
 
                 # 审查需要人工判断（如发现严重不确定性问题）
                 PipelineState.NEEDS_HUMAN: PipelineNode.HUMAN_INTERVENTION,  # 下一步：人工干预
@@ -270,7 +270,7 @@ class MultiAgentPipeline:
             #     PipelineState.VALID: self.decision_funcs.decide_retry_node_based_on_error_source,  # 根据错误来源决定
             #
             #     # 错误应该重试（如网络问题），根据错误来源决定重试节点
-            #     PipelineState.RETRY: self.decision_funcs.decide_retry_node_based_on_error_source,  # 根据错误来源决定
+            #     PipelineState.NEEDS_RETRY: self.decision_funcs.decide_retry_node_based_on_error_source,  # 根据错误来源决定
             #
             #     # 错误需要修复/调整（如参数问题）
             #     PipelineState.NEEDS_REPAIR: PipelineNode.CONVERT_PROMPT,  # 根据错误来源决定
@@ -293,7 +293,7 @@ class MultiAgentPipeline:
                 PipelineState.VALID: PipelineNode.GENERATE_OUTPUT,
 
                 # 重试 - 回到剧本解析重新开始
-                PipelineState.RETRY: PipelineNode.PARSE_SCRIPT,
+                PipelineState.NEEDS_RETRY: PipelineNode.PARSE_SCRIPT,
 
                 # 修复 - 回到提示词生成阶段进行修复
                 PipelineState.NEEDS_REPAIR: PipelineNode.CONVERT_PROMPT,
@@ -498,19 +498,19 @@ class MultiAgentPipeline:
             debug("开始增强的工作流执行...")
 
             # 方法A：使用修复器实例（推荐）
-            # final_result = await self.output_fixer.enhanced_workflow_invoke(
-            #     self.workflow,
-            #     initial_state
-            # )
+            final_result = await self.output_fixer.enhanced_workflow_invoke(
+                self.workflow,
+                initial_state
+            )
 
             # 使用 asyncio.wait_for 设置超时
-            final_result = await asyncio.wait_for(
-                self.output_fixer.enhanced_workflow_invoke(
-                    self.workflow,
-                    initial_state
-                ),
-                timeout=initial_state.timeout
-            )
+            # final_result = await asyncio.wait_for(
+            #     self.output_fixer.enhanced_workflow_invoke(
+            #         self.workflow,
+            #         initial_state
+            #     ),
+            #     timeout=initial_state.timeout
+            # )
 
             # 方法B：如果修复器需要调整配置
             # config_dict = {"configurable": {"thread_id": f"process_{id(initial_state)}"}}
