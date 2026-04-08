@@ -5,6 +5,7 @@
 @Github: https://github.com/neopen/video-shot-agent
 @Time: 2025/10 - 至今
 """
+import asyncio
 from typing import Dict, Any
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -497,9 +498,18 @@ class MultiAgentPipeline:
             debug("开始增强的工作流执行...")
 
             # 方法A：使用修复器实例（推荐）
-            final_result = await self.output_fixer.enhanced_workflow_invoke(
-                self.workflow,
-                initial_state
+            # final_result = await self.output_fixer.enhanced_workflow_invoke(
+            #     self.workflow,
+            #     initial_state
+            # )
+
+            # 使用 asyncio.wait_for 设置超时
+            final_result = await asyncio.wait_for(
+                self.output_fixer.enhanced_workflow_invoke(
+                    self.workflow,
+                    initial_state
+                ),
+                timeout=initial_state.timeout
             )
 
             # 方法B：如果修复器需要调整配置
