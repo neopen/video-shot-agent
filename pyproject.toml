@@ -118,9 +118,9 @@ full = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/neopen/story-shot-agent"
+Homepage = "https://github.com/neopen/story-shot-agent/blob/main/docs/PenShot.md"
 Repository = "https://github.com/neopen/story-shot-agent"
-Documentation = "https://github.com/neopen/story-shot-agent/blob/main/docs/PenShot.md"
+Documentation = "https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5"
 Changelog = "https://github.com/neopen/story-shot-agent/releases"
 Issues = "https://github.com/neopen/story-shot-agent/issues"
 
