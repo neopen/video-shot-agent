@@ -2,7 +2,7 @@
 
 A multi-agent collaborative screenplay storyboarding system that splits scripts in various formats into script units optimized for AI text-to-video generation durations. It outputs high-quality storyboard fragment descriptions while ensuring narrative continuity. Built on LangChain and LangGraph, the system leverages LLMs to parse any script format into "Text-to-Video" prompt fragments compatible with mainstream AI video models. It supports task pool priority queuing, multi-level memory management, and Chroma vector retrieval.
 
-[中文](../README.md) | English | [Architecture Documentation](https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5/) | [PyPI](https://pypi.org/project/penshot/)
+[中文](../README.md) | English | [Documentation](https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5/) | [PyPI](https://pypi.org/project/penshot/)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/) [![LangGraph](https://img.shields.io/badge/built_with-LangGraph-purple)](https://langchain-ai.github.io/langgraph/) [![PyPI](https://img.shields.io/pypi/v/penshot.svg)](https://pypi.org/project/penshot/) [![Downloads](https://static.pepy.tech/badge/penshot)](https://pepy.tech/project/penshot)
 
@@ -90,6 +90,9 @@ PENSHOT_LLM__DEFAULT__TIMEOUT=30
 PENSHOT_EMBED__DEFAULT__BASE_URL=https://api.openai.com/v1
 PENSHOT_EMBED__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 PENSHOT_EMBED__DEFAULT__MODEL_NAME=text-embedding-v4
+
+########################## Redis Configuration ##########################
+PENSHOT_REDIS_URL=redis://:123456@localhost:6379/0
 ```
 
 ### 3. Start the Service
@@ -286,8 +289,6 @@ This project is licensed under the MIT License. See the [LICENSE](https://chat.q
 ## Contact
 
 - Project Homepage: https://github.com/neopen/story-shot-agent
-- Author: NeoPen
-- Email: helpenx@gmail.com
-- Architecture Documentation: https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5/
+- Documentation: https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5/
 
 Special thanks to LangChain, LangGraph, Chroma, Ollama, and the open-source community for their technical support. If this project has been helpful to your work, please consider starring the repository and sharing your feedback.
