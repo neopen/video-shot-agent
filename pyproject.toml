@@ -7,7 +7,7 @@ version = {attr = "penshot.__version__"}
 
 [project]
 name = "penshot"
-version = "0.2.4"
+version = "0.3.0"
 description = "AI agent that converts screenplays to consistent Text-to-Video prompts. Supports Sora, Runway, Kling, Veo via LangGraph & LLMs."
 
 keywords = [
@@ -118,9 +118,9 @@ full = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/neopen/story-shot-agent/blob/main/docs/PenShot.md"
+Homepage = "https://github.com/neopen/story-shot-agent"
 Repository = "https://github.com/neopen/story-shot-agent"
-Documentation = "https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5"
+Documentation = "https://shot.pengline.cn"
 Changelog = "https://github.com/neopen/story-shot-agent/releases"
 Issues = "https://github.com/neopen/story-shot-agent/issues"
 
