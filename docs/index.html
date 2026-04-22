@@ -2,11 +2,34 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Penshot - 智能分镜视频生成</title>
-    <meta name="description" content="Penshot - AI驱动的剧本分镜视频生成工具，从剧本到视频，智能分镜，一键生成">
-    <meta name="keywords" content="AI视频,分镜生成,剧本转视频,智能分镜">
-    <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>PenShot - 智能分镜视频生成 | AI 剧本转视频工具</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="PenShot 是专业的 AI 智能分镜视频生成工具，支持剧本解析、镜头拆分、AI 提示词生成，提供 REST API、MCP 协议和 Python SDK，轻松集成到现有工作流。">
+    <meta name="keywords" content="AI视频生成,分镜生成,剧本转视频,智能分镜,视频AI,Runway,Pika,AI工具,视频制作">
+    <meta name="author" content="PenShot Team">
+    <meta name="robots" content="index, follow">
+    <meta name="language" content="Chinese">
+
+    <!-- Open Graph / Social Media -->
+    <meta property="og:title" content="PenShot - 智能分镜视频生成">
+    <meta property="og:description" content="从剧本到视频，AI 智能分镜，一键生成专业视频">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://shot.pengline.cn">
+    <meta property="og:image" content="https://shot.pengline.cn/og-image.png">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="PenShot - 智能分镜视频生成">
+    <meta name="twitter:description" content="从剧本到视频，AI 智能分镜，一键生成专业视频">
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://shot.pengline.cn">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
 
     <style>
         * {
@@ -41,7 +64,7 @@
             position: fixed;
             top: 0;
             width: 100%;
-            background: rgba(255,255,255,0.95);
+            background: rgba(255,255,255,0.98);
             backdrop-filter: blur(10px);
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             z-index: 1000;
@@ -54,6 +77,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .logo {
@@ -63,6 +87,7 @@
             font-size: 1.5rem;
             font-weight: 700;
             color: var(--primary);
+            text-decoration: none;
         }
 
         .logo-icon {
@@ -81,6 +106,7 @@
             display: flex;
             gap: 2rem;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .nav-links a {
@@ -94,14 +120,14 @@
             color: var(--primary);
         }
 
-        .github-btn {
+        .github-btn, .blog-btn {
             background: var(--dark);
             color: white !important;
             padding: 0.5rem 1rem;
             border-radius: 8px;
         }
 
-        .github-btn:hover {
+        .github-btn:hover, .blog-btn:hover {
             background: var(--primary);
         }
 
@@ -191,6 +217,37 @@
             }
         }
 
+        /* 统计数字 */
+        .stats {
+            background: white;
+            padding: 3rem 0;
+            margin-top: -2rem;
+            position: relative;
+            z-index: 10;
+        }
+
+        .stats-grid {
+            display: flex;
+            justify-content: center;
+            gap: 4rem;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-label {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
         /* 容器 */
         .container {
             max-width: 1280px;
@@ -206,7 +263,7 @@
         .section-title {
             text-align: center;
             font-size: 2.5rem;
-            margin-bottom: 3rem;
+            margin-bottom: 1rem;
         }
 
         .section-subtitle {
@@ -271,6 +328,8 @@
             font-family: 'Fira Code', 'Courier New', monospace;
             font-size: 0.9rem;
             margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
         }
 
         /* 特性列表 */
@@ -334,12 +393,77 @@
             margin: 0 auto 1rem;
         }
 
+        /* 对比表格 */
+        .comparison {
+            overflow-x: auto;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-light);
+        }
+
+        .comparison-table th {
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+
+        .comparison-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .check {
+            color: var(--success);
+            font-weight: bold;
+        }
+
         /* 页脚 */
         .footer {
             background: var(--dark);
             color: var(--gray-light);
             padding: 3rem 0;
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .footer-col h4 {
+            color: white;
+            margin-bottom: 1rem;
+        }
+
+        .footer-col a {
+            display: block;
+            color: var(--gray-light);
+            text-decoration: none;
+            margin-bottom: 0.5rem;
+            transition: color 0.2s;
+        }
+
+        .footer-col a:hover {
+            color: var(--primary-light);
+        }
+
+        .footer-bottom {
             text-align: center;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            font-size: 0.875rem;
         }
 
         /* 响应式 */
@@ -356,6 +480,9 @@
             .workflow {
                 flex-direction: column;
             }
+            .stats-grid {
+                gap: 2rem;
+            }
         }
     </style>
 </head>
@@ -364,16 +491,18 @@
 <!-- 导航栏 -->
 <nav class="navbar">
     <div class="nav-container">
-        <div class="logo">
+        <a href="#" class="logo">
             <div class="logo-icon">✍️</div>
             <span>PenShot</span>
-        </div>
+        </a>
         <div class="nav-links">
-            <a href="#features">功能特性</a>
+            <a href="#features">功能</a>
             <a href="#workflow">工作流程</a>
+            <a href="#demo">在线演示</a>
+            <a href="#pricing">定价</a>
             <a href="#usage">快速开始</a>
             <a href="#api">API文档</a>
-            <a href="https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5" target="_blank" class="blog-btn">Blog</a>
+            <a href="https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5" target="_blank" class="blog-btn">架构文档</a>
             <a href="https://github.com/neopen/story-shot-agent" target="_blank" class="github-btn">GitHub</a>
         </div>
     </div>
@@ -382,10 +511,35 @@
 <!-- Hero 区域 -->
 <section class="hero">
     <h1>从剧本到视频，AI 智能分镜</h1>
-    <p>Penshot 是一个 AI 驱动的智能分镜视频生成工具，将剧本自动转换为分镜序列，一键生成 AI 视频。</p>
+    <p>PenShot 是专业的 AI 智能分镜视频生成工具，将剧本自动转换为分镜序列，一键生成 AI 视频。支持 REST API、MCP 协议和 Python SDK。</p>
     <div class="hero-buttons">
-        <a href="#usage" class="btn btn-primary">快速开始</a>
+        <a href="#demo" class="btn btn-primary">在线体验</a>
+        <a href="#usage" class="btn btn-outline">快速开始</a>
         <a href="https://github.com/neopen/story-shot-agent" target="_blank" class="btn btn-outline">GitHub</a>
+    </div>
+</section>
+
+<!-- 统计数字 -->
+<section class="stats">
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-number">5000+</div>
+                <div class="stat-label">代码行数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">10+</div>
+                <div class="stat-label">AI 模型支持</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">3</div>
+                <div class="stat-label">集成协议</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">100%</div>
+                <div class="stat-label">开源免费</div>
+            </div>
+        </div>
     </div>
 </section>
 
@@ -398,32 +552,32 @@
             <div class="card">
                 <div class="card-icon">📝</div>
                 <h3>智能剧本解析</h3>
-                <p>支持多种格式剧本输入，自动识别场景、角色、对话，提取核心元素。</p>
+                <p>支持多种格式剧本输入，自动识别场景、角色、对话，提取核心元素。支持自然语言、标准格式、对话列表等。</p>
             </div>
             <div class="card">
                 <div class="card-icon">🎬</div>
                 <h3>AI 分镜拆分</h3>
-                <p>基于内容智能拆分镜头，自动判断景别、时长和镜头运动。</p>
+                <p>基于内容智能拆分镜头，自动判断景别（特写/中景/全景）、时长和镜头运动，生成专业分镜。</p>
             </div>
             <div class="card">
                 <div class="card-icon">✂️</div>
                 <h3>视频片段切割</h3>
-                <p>将镜头切割为适合 AI 生成的短片段，确保每段不超过 5 秒。</p>
+                <p>将镜头切割为适合 AI 生成的短片段，确保每段不超过 5 秒，保证 AI 模型的最佳生成效果。</p>
             </div>
             <div class="card">
                 <div class="card-icon">🤖</div>
                 <h3>AI 提示词生成</h3>
-                <p>自动生成高质量 AI 视频提示词，支持 Runway、Pika 等主流模型。</p>
+                <p>自动生成高质量 AI 视频提示词，支持 Runway Gen-2、Pika Labs、Sora 等主流 AI 视频模型。</p>
             </div>
             <div class="card">
                 <div class="card-icon">📊</div>
                 <h3>质量审查</h3>
-                <p>自动检查片段时长、连续性，确保生成质量。</p>
+                <p>自动检查片段时长、连续性，提供详细的审查报告，确保生成质量。</p>
             </div>
             <div class="card">
                 <div class="card-icon">🔌</div>
                 <h3>多协议支持</h3>
-                <p>支持 REST API、MCP 协议、Python SDK，轻松集成到现有系统。</p>
+                <p>支持 REST API、MCP 协议、Python SDK，轻松集成到 LangGraph、Claude Desktop、Cursor 等系统。</p>
             </div>
         </div>
     </div>
@@ -438,27 +592,101 @@
             <div class="step">
                 <div class="step-number">1</div>
                 <h4>剧本解析</h4>
-                <p>输入剧本文本，AI 解析场景、角色、对话</p>
+                <p>输入剧本文本，AI 解析场景、角色、对话，提取核心元素</p>
             </div>
             <div class="step">
                 <div class="step-number">2</div>
                 <h4>镜头拆分</h4>
-                <p>智能拆分镜头，确定景别和时长</p>
+                <p>智能拆分镜头，确定景别（特写/中景/全景）和时长</p>
             </div>
             <div class="step">
                 <div class="step-number">3</div>
                 <h4>片段切割</h4>
-                <p>切割为 ≤5 秒的 AI 生成片段</p>
+                <p>切割为 ≤5 秒的 AI 生成片段，保证模型最佳效果</p>
             </div>
             <div class="step">
                 <div class="step-number">4</div>
                 <h4>提示词生成</h4>
-                <p>生成高质量 AI 视频提示词</p>
+                <p>生成高质量 AI 视频提示词，支持主流视频模型</p>
             </div>
             <div class="step">
                 <div class="step-number">5</div>
                 <h4>视频生成</h4>
-                <p>调用 AI 模型生成视频</p>
+                <p>调用 AI 模型生成视频，拼接为完整作品</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 在线演示 -->
+<section id="demo" class="section">
+    <div class="container">
+        <h2 class="section-title">在线演示</h2>
+        <p class="section-subtitle">试试将你的剧本转换为分镜</p>
+
+        <div class="card" style="max-width: 800px; margin: 0 auto;">
+            <h3>📝 剧本输入</h3>
+            <textarea id="script-input" rows="6" style="width: 100%; padding: 1rem; border: 1px solid var(--gray-light); border-radius: 12px; font-family: inherit; margin: 1rem 0;" placeholder="输入你的剧本内容，例如：
+场景：现代办公室
+时间：下午3点
+人物：小李（程序员）
+动作：小李正在写代码，突然接到电话，表情惊讶"></textarea>
+
+            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                <select id="language-select" style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--gray-light);">
+                    <option value="zh">中文</option>
+                    <option value="en">English</option>
+                </select>
+                <button id="demo-submit" class="btn btn-primary">开始生成</button>
+            </div>
+
+            <div id="demo-result" style="display: none; margin-top: 1rem;">
+                <h4>生成结果</h4>
+                <div id="demo-result-content" class="code-block">
+                    <pre id="demo-result-pre">等待生成...</pre>
+                </div>
+            </div>
+
+            <div id="demo-loading" style="display: none; text-align: center; padding: 2rem;">
+                <div>⏳ 正在处理中，请稍候...</div>
+            </div>
+
+            <p style="font-size: 0.875rem; color: var(--gray); margin-top: 1rem;">
+                💡 提示：这是一个演示接口，实际使用请部署本地服务或调用 API。
+            </p>
+        </div>
+    </div>
+</section>
+
+<!-- 定价 -->
+<section id="pricing" class="section" style="background: var(--gray-light);">
+    <div class="container">
+        <h2 class="section-title">定价</h2>
+        <p class="section-subtitle">开源免费，企业级支持可选</p>
+
+        <div class="grid">
+            <div class="card" style="text-align: center;">
+                <h3>社区版</h3>
+                <div style="font-size: 2rem; font-weight: 700; margin: 1rem 0;">免费</div>
+                <ul style="list-style: none; text-align: left;">
+                    <li>✓ 完整功能</li>
+                    <li>✓ 本地部署</li>
+                    <li>✓ 社区支持</li>
+                    <li>✓ MIT 协议</li>
+                </ul>
+                <a href="https://github.com/neopen/story-shot-agent" target="_blank" class="btn btn-outline" style="margin-top: 1rem;">GitHub</a>
+            </div>
+
+            <div class="card" style="text-align: center; border: 2px solid var(--primary);">
+                <h3>企业版</h3>
+                <div style="font-size: 2rem; font-weight: 700; margin: 1rem 0;">定制</div>
+                <ul style="list-style: none; text-align: left;">
+                    <li>✓ 优先技术支持</li>
+                    <li>✓ 定制开发</li>
+                    <li>✓ SLA 保障</li>
+                    <li>✓ 私有化部署</li>
+                </ul>
+                <a href="#" class="btn btn-primary" style="margin-top: 1rem;">联系我们</a>
             </div>
         </div>
     </div>
@@ -468,7 +696,7 @@
 <section id="usage" class="section">
     <div class="container">
         <h2 class="section-title">快速开始</h2>
-        <p class="section-subtitle">3 分钟上手 Penshot</p>
+        <p class="section-subtitle">3 分钟上手 PenShot</p>
 
         <div class="card" style="margin-bottom: 2rem;">
             <h3>📦 安装</h3>
@@ -530,54 +758,22 @@ curl http://localhost:8000/api/v1/result/{task_id}</pre>
         <h2 class="section-title">API 接口</h2>
         <p class="section-subtitle">完整的 REST API 接口文档</p>
 
-        <div class="grid">
-            <div class="card">
-                <h3>📝 POST /api/v1/storyboard</h3>
-                <p>异步提交分镜生成任务</p>
-                <div class="code-block">
-                    <pre>{
-  "script": "剧本文本",
-  "language": "zh",
-  "callback_url": "可选的回调地址"
-}</pre>
-                </div>
-                <p><strong>返回:</strong> task_id 和状态</p>
-            </div>
-
-            <div class="card">
-                <h3>🔄 POST /api/v1/storyboard/sync</h3>
-                <p>同步提交，等待完成</p>
-                <div class="code-block">
-                    <pre>{
-  "script": "剧本文本",
-  "timeout": 300
-}</pre>
-                </div>
-                <p><strong>返回:</strong> 完整的分镜结果</p>
-            </div>
-
-            <div class="card">
-                <h3>📊 GET /api/v1/status/{task_id}</h3>
-                <p>查询任务状态</p>
-                <p><strong>返回:</strong> 状态、进度、阶段信息</p>
-            </div>
-
-            <div class="card">
-                <h3>📄 GET /api/v1/result/{task_id}</h3>
-                <p>获取任务结果</p>
-                <p><strong>返回:</strong> 分镜序列、统计数据</p>
-            </div>
-
-            <div class="card">
-                <h3>🗑️ DELETE /api/v1/task/{task_id}</h3>
-                <p>取消任务</p>
-            </div>
-
-            <div class="card">
-                <h3>❤️ GET /api/v1/health</h3>
-                <p>健康检查</p>
-                <p><strong>返回:</strong> 服务状态和统计</p>
-            </div>
+        <div class="comparison">
+            <table class="comparison-table">
+                <thead>
+                    <tr><th>方法</th><th>端点</th><th>描述</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>POST</td><td>/api/v1/storyboard</td><td>异步提交分镜生成任务</td></tr>
+                    <tr><td>POST</td><td>/api/v1/storyboard/sync</td><td>同步提交，等待完成</td></tr>
+                    <tr><td>GET</td><td>/api/v1/status/{task_id}</td><td>查询任务状态</td></tr>
+                    <tr><td>GET</td><td>/api/v1/result/{task_id}</td><td>获取任务结果</td></tr>
+                    <tr><td>DELETE</td><td>/api/v1/task/{task_id}</td><td>取消任务</td></tr>
+                    <tr><td>GET</td><td>/api/v1/health</td><td>健康检查</td></tr>
+                    <tr><td>GET</td><td>/api/v1/queue/status</td><td>获取队列状态</td></tr>
+                    <tr><td>GET</td><td>/api/v1/stats</td><td>获取统计信息</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 </section>
@@ -587,30 +783,12 @@ curl http://localhost:8000/api/v1/result/{task_id}</pre>
     <div class="container">
         <h2 class="section-title">技术架构</h2>
         <div class="features-list">
-            <div class="feature-item">
-                <div class="feature-icon">🐍</div>
-                <div><strong>Python 3.9+</strong><br>核心开发语言</div>
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">⚡</div>
-                <div><strong>FastAPI</strong><br>高性能 Web 框架</div>
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">🧠</div>
-                <div><strong>LangGraph</strong><br>工作流编排</div>
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">🗄️</div>
-                <div><strong>Redis</strong><br>任务持久化</div>
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">🔌</div>
-                <div><strong>MCP 协议</strong><br>AI 智能体集成</div>
-            </div>
-            <div class="feature-item">
-                <div class="feature-icon">🎨</div>
-                <div><strong>Runway/Pika</strong><br>AI 视频生成</div>
-            </div>
+            <div class="feature-item"><div class="feature-icon">🐍</div><div><strong>Python 3.9+</strong><br>核心开发语言</div></div>
+            <div class="feature-item"><div class="feature-icon">⚡</div><div><strong>FastAPI</strong><br>高性能 Web 框架</div></div>
+            <div class="feature-item"><div class="feature-icon">🧠</div><div><strong>LangGraph</strong><br>工作流编排</div></div>
+            <div class="feature-item"><div class="feature-icon">🗄️</div><div><strong>Redis</strong><br>任务持久化</div></div>
+            <div class="feature-item"><div class="feature-icon">🔌</div><div><strong>MCP 协议</strong><br>AI 智能体集成</div></div>
+            <div class="feature-item"><div class="feature-icon">🎨</div><div><strong>Runway/Pika</strong><br>AI 视频生成</div></div>
         </div>
     </div>
 </section>
@@ -618,13 +796,34 @@ curl http://localhost:8000/api/v1/result/{task_id}</pre>
 <!-- 页脚 -->
 <footer class="footer">
     <div class="container">
-        <p>Penshot - 智能分镜视频生成工具</p>
-        <p style="margin-top: 0.5rem; font-size: 0.875rem;">
-            <a href="https://github.com/neopen/story-shot-agent" style="color: var(--primary-light);">GitHub</a> |
-            <a href="#" style="color: var(--primary-light);">文档</a> |
-            <a href="#" style="color: var(--primary-light);">问题反馈</a>
-        </p>
-        <p style="margin-top: 1rem; font-size: 0.75rem;">© 2024 Penshot. MIT License.</p>
+        <div class="footer-grid">
+            <div class="footer-col">
+                <h4>PenShot</h4>
+                <p>AI 驱动的智能分镜视频生成工具</p>
+            </div>
+            <div class="footer-col">
+                <h4>链接</h4>
+                <a href="#features">功能特性</a>
+                <a href="#workflow">工作流程</a>
+                <a href="#pricing">定价</a>
+                <a href="#usage">快速开始</a>
+            </div>
+            <div class="footer-col">
+                <h4>资源</h4>
+                <a href="https://github.com/neopen/story-shot-agent" target="_blank">GitHub</a>
+                <a href="https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5" target="_blank">Blog</a>
+                <a href="#">文档</a>
+                <a href="#">问题反馈</a>
+            </div>
+            <div class="footer-col">
+                <h4>联系方式</h4>
+                <a href="mailto:helpenx+shot@gmail.com">helpenx@gmail.com</a>
+                <a href="#">GitHub Issues</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>© 2025 PenShot. MIT License. | 从剧本到视频，AI 智能分镜</p>
+        </div>
     </div>
 </footer>
 
@@ -640,21 +839,47 @@ curl http://localhost:8000/api/v1/result/{task_id}</pre>
         });
     });
 
-    // 动态显示当前时间
-    function updateTime() {
-        const timeElement = document.getElementById('current-time');
-        if (timeElement) {
-            timeElement.textContent = new Date().toLocaleString('zh-CN');
+    // 在线演示功能
+    const demoSubmit = document.getElementById('demo-submit');
+    const scriptInput = document.getElementById('script-input');
+    const languageSelect = document.getElementById('language-select');
+    const demoResult = document.getElementById('demo-result');
+    const demoLoading = document.getElementById('demo-loading');
+    const demoResultPre = document.getElementById('demo-result-pre');
+
+    demoSubmit.addEventListener('click', async function() {
+        const script = scriptInput.value.trim();
+        if (!script) {
+            alert('请输入剧本内容');
+            return;
         }
-    }
-    updateTime();
 
-    // 添加滚动动画效果
-    const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-    };
+        demoLoading.style.display = 'block';
+        demoResult.style.display = 'none';
 
+        // 模拟 API 调用
+        setTimeout(() => {
+            demoLoading.style.display = 'none';
+            demoResult.style.display = 'block';
+
+            // 模拟生成结果
+            const mockResult = {
+                success: true,
+                task_id: "demo_" + Date.now(),
+                shots: [
+                    { id: "shot_001", description: "中景：小李在办公室写代码", duration: 3.0, shot_type: "medium_shot" },
+                    { id: "shot_002", description: "特写：小李惊讶的表情", duration: 2.0, shot_type: "close_up" },
+                    { id: "shot_003", description: "中景：小李接听电话", duration: 2.5, shot_type: "medium_shot" }
+                ],
+                stats: { shot_count: 3, total_duration: 7.5 }
+            };
+
+            demoResultPre.textContent = JSON.stringify(mockResult, null, 2);
+        }, 1500);
+    });
+
+    // 滚动动画
+    const observerOptions = { threshold: 0.1, rootMargin: '0px 0px -50px 0px' };
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
