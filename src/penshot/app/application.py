@@ -39,6 +39,8 @@ async def app_startup():
     os.makedirs(memory_dir, exist_ok=True)
     embedding_dir = os.path.join(PathResolver.get_project_root(), data_paths["data_embedding"])
     os.makedirs(embedding_dir, exist_ok=True)
+    template_dir = os.path.join(PathResolver.get_project_root(), data_paths["data_template"])
+    os.makedirs(template_dir, exist_ok=True)
 
     pass
 

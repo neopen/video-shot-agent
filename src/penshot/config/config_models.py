@@ -151,4 +151,5 @@ class PathsConfig(BaseModel):
     data_output: str = Field(default="data/output")
     data_memory: str = Field(default="data/memory")
     data_embedding: str = Field(default="data/embedding")
+    data_template: str = Field(default="data/template")
     model_cache: str = Field(default="data/models")
