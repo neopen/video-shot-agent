@@ -6,8 +6,8 @@
 """
 from langchain.chat_models import ChatOpenAI
 
-from penshot.neopen.tools.memory.medium_term_memory import MediumTermMemory
-from penshot.neopen.tools.memory.memory_models import MemoryConfig
+from penshot.neopen.knowledge.memory.medium_term_memory import MediumTermMemory
+from penshot.neopen.knowledge.memory.memory_models import MemoryConfig
 
 # 配置
 config = MemoryConfig(
