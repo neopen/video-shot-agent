@@ -93,7 +93,7 @@ class WorkflowNodes:
         # 初始化输出写入器
         self.output_writer = WorkflowOutputWriter(self.storage, self.memory)
 
-    async def _init_knowledge_embeddings(self, state: WorkflowState):
+    def _init_knowledge_embeddings(self, state: WorkflowState):
         """初始化知识路由器"""
         # ========== 0. 初始化知识库（添加当前剧本） ==========
         if self.knowledge_manager and state.raw_script:

@@ -37,7 +37,7 @@ class PromptTemplateManager:
             self,
             embedding_model,
             memory_manager: Optional[MemoryManager] = None,
-            storage_dir: Optional[str] = settings.get_data_paths.get('data_template'),
+            storage_dir: Optional[str] = settings.get_data_paths().get('data_template'),
             chunk_size: int = 512,
             chunk_overlap: int = 20,
             min_similarity_score: float = 0.7,
