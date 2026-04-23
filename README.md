@@ -2,13 +2,15 @@
 
 A multi-agent collaborative screenplay storyboarding system that splits scripts in various formats into script units optimized for AI text-to-video generation durations. It outputs high-quality storyboard fragment descriptions while ensuring narrative continuity. Built on LangChain and LangGraph, the system leverages LLMs to parse any script format into "Text-to-Video" prompt fragments compatible with mainstream AI video models. It supports task pool priority queuing, multi-level memory management, and Chroma vector retrieval.
 
-[中文](README_zh.md) | English | [Documentation](https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5/) | [PyPI](https://pypi.org/project/penshot/) | [WebSite](https://shot.pengline.cn)
+[中文](./README_zh.md) | English | [Documentation](https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5/) | [PyPI](https://pypi.org/project/penshot/) | [WebSite](https://shot.pengline.cn)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/) [![LangGraph](https://img.shields.io/badge/built_with-LangGraph-purple)](https://langchain-ai.github.io/langgraph/) [![PyPI](https://img.shields.io/pypi/v/penshot.svg)](https://pypi.org/project/penshot/) [![Downloads](https://static.pepy.tech/badge/penshot)](https://pepy.tech/project/penshot) ![GitHub stars](https://img.shields.io/github/stars/neopen/story-shot-agent)
 
 **From Story to Shot** - Transform your scripts into AI-powered storyboards.
 
 > Named "penshot" on PyPI - because every story starts with a pen.
+
+
 ---
 
 ## Core Features
@@ -22,6 +24,8 @@ A multi-agent collaborative screenplay storyboarding system that splits scripts 
 | Multi-Model Compatibility | Supports OpenAI, Qwen, DeepSeek, Ollama, and other major LLM providers with plug-and-play switching. |
 | Multi-Protocol Integration | Provides Python SDK, REST API, LangGraph nodes, A2A collaboration protocol, and standard MCP interfaces. |
 | Robustness & Traceability | Built-in auto-retry and error fallback mechanisms. Every storyboard fragment is bidirectionally traceable to its original script location. |
+
+
 
 ---
 
@@ -37,7 +41,7 @@ flowchart TD
     subgraph Core [LangGraph Multi-Agent Core Workflow]
         direction TB
         
-        P1[Script Parser Agent] --> P2[Shot Generator Agent]
+        P1[Script Parser Agent] --> P2[Storyboard Generator Agent]
         P2 --> P3[Video Splitter Agent]
         P3 --> P4[Prompt Converter Agent]
         P4 --> P5[Quality Auditor Agent]
@@ -88,7 +92,9 @@ flowchart TD
 
 ```
 
-This system is a typical Natural Language Processing (NLP) application that achieves end-to-end storyboard transcoding through multi-agent collaboration and memory mechanisms. For detailed architectural design, memory pool implementation, and continuity assurance, please refer to: [Storyboard Agent Architecture Design](https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5/)
+This system is a typical Natural Language Processing (NLP) application that achieves end-to-end storyboard transcoding through multi-agent collaboration and memory mechanisms. For detailed architectural design, memory pool implementation, and continuity assurance, please refer to: [Architecture Design & Implementation](https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5/)
+
+
 
 ------
 
@@ -97,13 +103,8 @@ This system is a typical Natural Language Processing (NLP) application that achi
 ### 1. Environment Setup
 
 ```bash
-# Option A: Install via PyPI (Recommended)
+# Install via PyPI
 pip install penshot
-
-# Option B: Install in editable mode (from source)
-git clone https://github.com/neopen/story-shot-agent.git
-cd story-shot-agent
-pip install -e .
 ```
 
 > Note: `penshot` is the PyPI package name, while `story-shot-agent` is the GitHub repository name. Both refer to the same project.
@@ -132,43 +133,9 @@ PENSHOT_EMBED__DEFAULT__MODEL_NAME=text-embedding-v4
 PENSHOT_REDIS_URL=redis://:123456@localhost:6379/0
 ```
 
-### 3. Start the Service
+### 3.Usage Methods
 
-```bash
-python main.py
-```
-
-The service will run on `http://0.0.0.0:8000` and expose a complete REST API.
-
-### 4. API Usage Example
-
-Submit a storyboard task:
-
-```bash
-curl -X POST 'http://localhost:8000/api/v1/storyboard' \
--H 'Content-Type: application/json' \
--d '{
-  "script": "Late at night, 11 PM in a city apartment living room. Heavy rain pours outside the window..."
-}'
-```
-
-Check task status:
-
-```bash
-curl 'http://localhost:8000/api/v1/status/{task_id}'
-```
-
-Retrieve task results:
-
-```bash
-curl 'http://localhost:8000/api/v1/result/{task_id}'
-```
-
-------
-
-## Integration Methods
-
-### 1. Python SDK
+#### 1. Python SDK
 
 ```python
 from penshot.api import create_penshot_agent
@@ -187,7 +154,7 @@ result = await agent.wait_for_result_async(task_id)
 
 Full example: [direct_usage.py](https://github.com/neopen/story-shot-agent/blob/main/example/direct_usage.py)
 
-### 2. FastAPI Web Application Integration
+#### 2. FastAPI Web Application Integration
 
 Integrate into existing systems via standard HTTP endpoints:
 
@@ -206,15 +173,15 @@ async def generate(script_text: str):
 
 Full example: [web_app.py](https://github.com/neopen/story-shot-agent/blob/main/example/web_app.py)
 
-### 3. LangGraph Node Integration
+#### 3. LangGraph Node Integration
 
 Can be embedded as an independent node in LangChain/LangGraph workflows for end-to-end automation. Full example: [langgraph_integration.py](https://github.com/neopen/story-shot-agent/blob/main/example/langgraph_integration.py)
 
-### 4. A2A Protocol Collaboration
+#### 4. A2A Protocol Collaboration
 
 Supports context passing and task orchestration with upstream scriptwriting agents and downstream text-to-video/editing agents. Full example: [a2a_integration.py](https://github.com/neopen/story-shot-agent/blob/main/example/a2a_integration.py)
 
-### 5. MCP (Model Context Protocol) Support
+#### 5. MCP (Model Context Protocol) Support
 
 Start the MCP Server:
 
@@ -223,6 +190,8 @@ python -m penshot.mcp_server --max-concurrent 5 --queue-size 500
 ```
 
 Clients can call the `breakdown_script` and `get_task_result` tools to seamlessly integrate with MCP-compatible IDEs or agent frameworks. Full example: [mcp_client.py](https://github.com/neopen/story-shot-agent/blob/main/example/mcp_client.py)
+
+
 
 ------
 
@@ -251,6 +220,8 @@ The system returns standardized JSON containing video prompts, negative prompts,
 }
 ```
 
+
+
 ------
 
 ## System Notes & Considerations
@@ -263,6 +234,10 @@ The system returns standardized JSON containing video prompts, negative prompts,
 | Multilingual Support  | Currently optimized for Chinese scripts. Support for other languages is under active iteration. |
 | Audio Synchronization | Audio prompts are provided. Lip-sync and environmental sound fusion require downstream tooling. |
 | Error Handling        | Auto-retry and fallback mechanisms are built-in. Extreme edge cases may require manual intervention. |
+
+
+
+------
 
 ## Development Roadmap
 
@@ -295,6 +270,8 @@ The system returns standardized JSON containing video prompts, negative prompts,
 
 Achieve zero-information-loss visualization for scripts of any length, language, or genre, delivering a standardized workflow that meets professional director-level storyboarding standards. The system will feature customizable styles, full traceability, automatic optimization loops, and cross-modal high consistency.
 
+
+
 ------
 
 ## Contributing
@@ -315,11 +292,15 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
+
+
 ------
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](https://chat.qwen.ai/c/LICENSE) file for details. Copyright (c) 2024 HiPeng
+This project is licensed under the MIT License. See the [LICENSE](https://chat.qwen.ai/c/LICENSE) file for details. Copyright (c) 2025 HiPeng
+
+
 
 ------
 
