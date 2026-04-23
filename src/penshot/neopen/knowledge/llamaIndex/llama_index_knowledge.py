@@ -19,6 +19,7 @@ from llama_index.core.retrievers import BaseRetriever
 from llama_index.core.schema import Document
 from llama_index.core.vector_stores import SimpleVectorStore
 
+from penshot.config.config import settings
 from penshot.logger import debug, info, error, warning
 from penshot.neopen.tools.script_parser_tool import parse_script_to_documents, parse_script_file_to_documents
 
@@ -30,20 +31,20 @@ class ScriptKnowledgeBase:
     """
 
     def __init__(self,
-                 embedding_model: Optional[BaseEmbedding] = None,
-                 storage_dir: Optional[str] = None,
+                 embeddings: Optional[BaseEmbedding],
+                 storage_dir: str = settings.get_data_paths().get("data_embedding"),
                  chunk_size: int = 512,
                  chunk_overlap: int = 20):
         """
         初始化剧本知识库
         
         Args:
-            embedding_model: 嵌入模型
+            embeddings: 嵌入模型
             storage_dir: 存储目录
             chunk_size: 文本块大小
             chunk_overlap: 文本块重叠大小
         """
-        self.embedding_model = embedding_model
+        self.embeddings = embeddings
         self.storage_dir = storage_dir
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
@@ -403,7 +404,7 @@ class ScriptKnowledgeBase:
             "character_count": total_characters,
             "document_count": total_documents,
             "parsed_scripts": list(self.parsed_results.keys()),
-            "embedding_model": str(self.embedding_model) if self.embedding_model else None,
+            "embedding_model": str(self.embeddings) if self.embeddings else None,
             "storage_dir": self.storage_dir,
             "chunk_size": self.chunk_size,
             "chunk_overlap": self.chunk_overlap
@@ -475,7 +476,7 @@ class ScriptKnowledgeBase:
                     documents,
                     storage_context=self.storage_context,
                     transformations=[node_parser],
-                    embed_model=self.embedding_model,
+                    embed_model=self.embeddings,
                     show_progress=True
                 )
             else:
@@ -502,7 +503,7 @@ class ScriptKnowledgeBase:
                 self.index = VectorStoreIndex.from_vector_store(
                     self.vector_store,
                     storage_context=self.storage_context,
-                    embed_model=self.embedding_model
+                    embed_model=self.embeddings
                 )
                 debug("已加载向量存储")
 
@@ -569,15 +570,15 @@ class ScriptKnowledgeBase:
         return hasattr(self.retriever, '_retriever_mode') and self.retriever._retriever_mode == search_type
 
 
-def create_script_knowledge_base(embedding_model=None, storage_dir=None) -> ScriptKnowledgeBase:
+def create_script_knowledge_base(embeddings, storage_dir=None) -> ScriptKnowledgeBase:
     """
     创建剧本知识库实例
     
     Args:
-        embedding_model: 嵌入模型
+        embeddings: 嵌入模型
         storage_dir: 存储目录
-        
+
     Returns:
         剧本知识库实例
     """
-    return ScriptKnowledgeBase(embedding_model=embedding_model, storage_dir=storage_dir)
+    return ScriptKnowledgeBase(embeddings=embeddings, storage_dir=storage_dir)

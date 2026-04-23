@@ -12,7 +12,6 @@ from typing import Dict, List, Optional, Any, Tuple
 
 from llama_index.core.schema import Document
 
-from penshot.neopen.agent.script_parser2.script_parser_models import Character, Scene, Action
 from penshot.logger import debug, info, error
 from penshot.utils.log_utils import print_log_exception
 

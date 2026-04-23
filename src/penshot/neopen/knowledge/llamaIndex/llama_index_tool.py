@@ -23,7 +23,7 @@ from penshot.logger import debug, info, error
 def create_vector_store(
         documents: Optional[List] = None,
         index_name: str = "default_index",
-        storage_dir: Optional[str] = settings.get_data_paths['embedding_cache'],
+        storage_dir: Optional[str] = settings.get_data_paths().get("data_embedding"),
         embedding_model: Optional[BaseEmbedding] = None,
         rebuild: bool = False
 ) -> VectorStoreIndex:
@@ -96,7 +96,7 @@ def create_vector_store(
 def create_index_from_directory(
         directory_path: str,
         index_name: str = "directory_index",
-        storage_dir: Optional[str] = settings.get_data_paths['embedding_cache'],
+        storage_dir: Optional[str] = settings.get_data_paths().get("data_embedding"),
         embedding_model: Optional[BaseEmbedding] = None,
         recursive: bool = True,
         required_exts: Optional[List[str]] = None,

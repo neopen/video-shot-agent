@@ -416,11 +416,83 @@ async def enhance_prompt_generation_with_knowledge(
         return None
 
 
+def enhance_prompt_generation_sync(
+        fragment_text: str,
+        knowledge_router: KnowledgeRouter
+) -> Optional[str]:
+    """
+    同步版本的提示词增强（供工作流节点调用）
+
+    由于 LangGraph 工作流节点是同步的，需要使用此包装器
+    """
+    import asyncio
+
+    # 检查是否已在事件循环中运行
+    try:
+        loop = asyncio.get_running_loop()
+        # 如果在事件循环中，使用线程池执行
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(
+                asyncio.run,
+                enhance_prompt_generation_with_knowledge(fragment_text, knowledge_router)
+            )
+            return future.result()
+    except RuntimeError:
+        # 没有运行中的事件循环，直接创建新循环
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(
+                enhance_prompt_generation_with_knowledge(fragment_text, knowledge_router)
+            )
+        finally:
+            loop.close()
+
+
+def enhance_continuity_check_sync(
+        state: WorkflowState,
+        knowledge_router: KnowledgeRouter
+):
+    """
+    同步版本的连续性检查增强（供工作流节点调用）
+    """
+    import asyncio
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        # 在事件循环中，需要特殊处理
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(
+                asyncio.run,
+                enhance_continuity_check_with_knowledge(state, knowledge_router)
+            )
+            return future.result()
+    else:
+        # 没有事件循环，直接运行
+        if loop is None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(
+                    enhance_continuity_check_with_knowledge(state, knowledge_router)
+                )
+            finally:
+                loop.close()
+        else:
+            return asyncio.run(
+                enhance_continuity_check_with_knowledge(state, knowledge_router)
+            )
+
 # ========== 工厂函数 ==========
 
 def create_knowledge_router(
-        embedding_model=None,
-        storage_dir: Optional[str] = None,
+        embeddings,
         memory_manager: Optional[MemoryManager] = None,
         auto_load_scripts: bool = True
 ) -> KnowledgeRouter:
@@ -428,8 +500,7 @@ def create_knowledge_router(
     创建知识路由器实例
     
     Args:
-        embedding_model: 嵌入模型
-        storage_dir: 知识库存储目录
+        embeddings: 嵌入模型
         memory_manager: 记忆管理器实例
         auto_load_scripts: 是否自动加载已有剧本
         
@@ -438,8 +509,7 @@ def create_knowledge_router(
     """
     # 创建 LlamaIndex 知识库
     script_kb = ScriptKnowledgeBase(
-        embedding_model=embedding_model,
-        storage_dir=storage_dir,
+        embeddings=embeddings,
         chunk_size=512,
         chunk_overlap=20
     )

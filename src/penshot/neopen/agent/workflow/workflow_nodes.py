@@ -19,9 +19,11 @@ from penshot.neopen.agent.quality_auditor.quality_auditor_models import AuditSta
 from penshot.neopen.agent.workflow.workflow_models import AgentStage, PipelineNode
 from penshot.neopen.agent.workflow.workflow_output import WorkflowOutputWriter
 from penshot.neopen.agent.workflow.workflow_states import WorkflowState
-from penshot.neopen.task.task_models import TaskStage, TaskStatus
+from penshot.neopen.knowledge.llama_index_router import create_knowledge_router, enhance_continuity_check_sync, \
+    enhance_prompt_generation_sync
 from penshot.neopen.knowledge.memory.memory_manager import MemoryManager
 from penshot.neopen.knowledge.memory.memory_models import MemoryConfig, MemoryLevel
+from penshot.neopen.task.task_models import TaskStage, TaskStatus
 from penshot.neopen.tools.result_storage_tool import create_result_storage
 from penshot.utils.log_utils import print_log_exception
 
@@ -63,6 +65,11 @@ class WorkflowNodes:
                 long_term_enabled=True,
                 long_term_k=3,
             )
+        )
+
+        self.knowledge_router = create_knowledge_router(
+            embeddings=self.embeddings,
+            memory_manager=self.memory,
         )
 
         # 启动时恢复长期记忆中的常见问题模式
@@ -169,7 +176,7 @@ class WorkflowNodes:
                 if len(all_issues) > 100:
                     all_issues = all_issues[-100:]
                 self.memory.add("common_parse_issues", all_issues, level=MemoryLevel.LONG_TERM,
-                    metadata={"_serialized": True})
+                                metadata={"_serialized": True})
 
             # ========== 6. 更新状态 ==========
             state.parsed_script = parsed_script
@@ -663,6 +670,15 @@ class WorkflowNodes:
                 metadata={"_serialized": True}  # 添加序列化标记
             )
 
+            # 对每个片段增强提示词
+            if self.knowledge_router:
+                for fragment in state.instructions.fragments:
+                    enhanced = enhance_prompt_generation_sync(
+                        fragment.prompt, self.knowledge_router
+                    )
+                    if enhanced:
+                        fragment.prompt = enhanced
+
             # ========== 9. 日志输出 ==========
             stats = self._get_memory_dict(f"stats_{PipelineNode.CONVERT_PROMPT.value}", level=MemoryLevel.MEDIUM_TERM)
             info(f"提示词转换节点完成，统计: {stats}")
@@ -789,7 +805,7 @@ class WorkflowNodes:
             if len(audit_history) > 50:
                 audit_history = audit_history[-50:]
             self.memory.add("audit_results_history", audit_history, level=MemoryLevel.MEDIUM_TERM,
-                metadata={"_serialized": True})
+                            metadata={"_serialized": True})
 
             info(f"审计结果汇总: 状态={result.status.value}, 分数={result.score}%, 问题统计={result.stats}")
 
@@ -992,6 +1008,12 @@ class WorkflowNodes:
 
             warning(f"发现 {len(continuity_issues)} 个连续性问题，分布在: {[s.name for s in issues_by_stage.keys()]}, "
                     f"重试次数: {state.continuity_retry_count}/{state.max_continuity_retries}")
+
+            # 增强：使用知识库检索历史解决方案
+            if self.knowledge_router and state.continuity_issues:
+                state = enhance_continuity_check_sync(
+                    state, self.knowledge_router
+                )
 
             # 6. 检查重试限制
             if state.continuity_retry_count < state.max_continuity_retries:
@@ -1376,7 +1398,7 @@ class WorkflowNodes:
             if elapsed_time > 1800:  # 30分钟 = 1800秒
                 warning(f"工作流执行超时: {elapsed_time:.1f}秒，超过30分钟限制")
                 return "abort"
-        
+
         # 检查循环限制
         if getattr(state, 'global_loop_exceeded', False):
             return "abort"
