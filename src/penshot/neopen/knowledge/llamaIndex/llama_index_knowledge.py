@@ -21,6 +21,7 @@ from llama_index.core.vector_stores import SimpleVectorStore
 
 from penshot.config.config import settings
 from penshot.logger import debug, info, error, warning
+from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript
 from penshot.neopen.tools.script_parser_tool import parse_script_to_documents, parse_script_file_to_documents
 
 
@@ -65,6 +66,60 @@ class ScriptKnowledgeBase:
             self._load_storage()
 
         debug("剧本知识库初始化完成")
+
+
+    def add_parsed_script(self, parsed_script: ParsedScript, script_id: str = None) -> Dict[str, Any]:
+        """
+        直接添加已解析的剧本对象到知识库（推荐）
+
+        Args:
+            parsed_script: 已解析的 ParsedScript 对象
+            script_id: 剧本唯一标识
+
+        Returns:
+            添加结果信息
+        """
+        try:
+            if script_id is None:
+                script_id = f"script_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+            debug(f"添加已解析剧本: {script_id}")
+
+            # 直接从 ParsedScript 创建文档（避免重复解析）
+            documents = self._create_documents_from_parsed(parsed_script)
+
+            # 缓存解析结果
+            self.parsed_results[script_id] = parsed_script.model_dump()
+            self.document_cache[script_id] = documents
+
+            # 添加到索引
+            self._add_documents_to_index(documents, script_id)
+
+            # 保存存储
+            if self.storage_dir:
+                self._save_storage()
+                self._save_parsed_result(script_id, parsed_script.model_dump())
+
+            info(f"成功添加已解析剧本: {script_id}, 包含{len(documents)}个文档")
+
+            return {
+                "status": "success",
+                "script_id": script_id,
+                "scene_count": len(parsed_script.scenes),
+                "character_count": len(parsed_script.characters),
+                "document_count": len(documents)
+            }
+
+        except Exception as e:
+            error(f"添加已解析剧本失败: {str(e)}")
+            raise
+
+    def _create_documents_from_parsed(self, parsed_script: ParsedScript) -> List[Document]:
+        """从 ParsedScript 对象创建文档（复用 ScriptParserTool 的逻辑）"""
+        from penshot.neopen.tools.script_parser_tool import ScriptParserTool
+
+        parser_tool = ScriptParserTool()
+        return parser_tool.create_documents(parsed_script)
 
     def add_script_text(self, script_text: str, script_id: str = None) -> Dict[str, Any]:
         """
@@ -533,7 +588,7 @@ class ScriptKnowledgeBase:
         except Exception as e:
             warning(f"保存存储失败: {str(e)}")
 
-    def _save_parsed_result(self, script_id: str, parsed_result: Dict[str, Any]):
+    def _save_parsed_result(self, script_id: str, parsed_result: ParsedScript):
         """
         保存解析结果
         

@@ -44,16 +44,26 @@ class ScriptParserAgent(BaseRepairableAgent[ParsedScript, str]):
         self.parsing_history = []
         self.last_parsed_script = None
 
-    def process(self, script_text: str) -> Optional[ParsedScript]:
+    def process(self, script_text: str, knowledge_manager=None, script_id=None) -> Optional[ParsedScript]:
         """
-            处理剧本解析
+        处理剧本解析
 
-            Args:
-                script_text: 原始剧本文本
+        Args:
+            script_text: 原始剧本文本
+            knowledge_manager: 知识管理器（可选）
+            script_id: 剧本ID（可选）
+        """
+        parsed_script = self.parser_process(script_text)
 
-            """
+        if parsed_script and knowledge_manager:
+            try:
+                knowledge_manager.add_parsed_script(parsed_script, script_id)
+                info(f"剧本解析结果已存入知识库: {script_id}")
+            except Exception as e:
+                warning(f"存入知识库失败: {e}")
 
-        return self.parser_process(script_text)
+        return parsed_script
+
 
     def repair_result(self, parsed_script: ParsedScript, issues: List[BasicViolation],
                       original_text: str = None) -> ParsedScript:
@@ -105,6 +115,7 @@ class ScriptParserAgent(BaseRepairableAgent[ParsedScript, str]):
             self._focus_on_scene_detection = True
         if "character_missing" in self.current_repair_params.issue_types:
             self._focus_on_character_detection = True
+
 
     def parser_process(self, script_text: str) -> Optional[ParsedScript]:
         """

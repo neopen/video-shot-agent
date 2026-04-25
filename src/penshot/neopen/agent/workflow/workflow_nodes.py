@@ -93,22 +93,12 @@ class WorkflowNodes:
         # 初始化输出写入器
         self.output_writer = WorkflowOutputWriter(self.storage, self.memory)
 
-    def _init_knowledge_embeddings(self, state: WorkflowState):
-        """初始化知识路由器"""
-        # ========== 0. 初始化知识库（添加当前剧本） ==========
-        if self.knowledge_manager and state.raw_script:
-            self.knowledge_manager.add_script(
-                state.raw_script,
-                state.script_id or self.script_id
-            )
 
     def parse_script_node(self, state: WorkflowState) -> WorkflowState:
         """
         剧本解析节点（增强版）
         功能：将原始剧本解析为结构化元素序列，支持修复参数
         """
-        self._init_knowledge_embeddings(state)
-
         try:
             # 更新状态：开始解析
             self._update_task_status(state.task_id, TaskStatus.PROCESSING)
@@ -144,7 +134,11 @@ class WorkflowNodes:
             self._update_task_progress(state.task_id, TaskStage.PARSING_SCRIPT, 30)
 
             # ========== 3. 执行解析 ==========
-            parsed_script = self.script_parser.process(state.raw_script)
+            parsed_script = self.script_parser.process(
+                state.raw_script,
+                knowledge_manager=self.knowledge_manager,
+                script_id=state.script_id
+            )
 
             debug(f"剧本解析完成，场景数: {len(parsed_script.scenes)}，角色数: {len(parsed_script.characters)}")
             debug(f"完整性评分: {parsed_script.stats.get('completeness_score', 0)}")
