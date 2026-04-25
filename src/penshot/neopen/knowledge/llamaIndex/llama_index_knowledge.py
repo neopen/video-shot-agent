@@ -60,6 +60,8 @@ class ScriptKnowledgeBase:
         self.parsed_results = {}
         self.document_cache = {}
 
+        self._parser_tool = None  # 缓存
+
         # 初始化存储
         if self.storage_dir:
             os.makedirs(self.storage_dir, exist_ok=True)
@@ -98,7 +100,7 @@ class ScriptKnowledgeBase:
             # 保存存储
             if self.storage_dir:
                 self._save_storage()
-                self._save_parsed_result(script_id, parsed_script.model_dump())
+                self._save_parsed_result(script_id, self.parsed_results[script_id])
 
             info(f"成功添加已解析剧本: {script_id}, 包含{len(documents)}个文档")
 
@@ -116,10 +118,8 @@ class ScriptKnowledgeBase:
 
     def _create_documents_from_parsed(self, parsed_script: ParsedScript) -> List[Document]:
         """从 ParsedScript 对象创建文档（复用 ScriptParserTool 的逻辑）"""
-        from penshot.neopen.tools.script_parser_tool import ScriptParserTool
 
-        parser_tool = ScriptParserTool()
-        return parser_tool.create_documents(parsed_script)
+        return self._get_parser_tool().create_documents(parsed_script)
 
     def add_script_text(self, script_text: str, script_id: str = None) -> Dict[str, Any]:
         """
@@ -142,7 +142,7 @@ class ScriptKnowledgeBase:
             parsed_result, documents = parse_script_to_documents(script_text)
 
             # 缓存解析结果
-            self.parsed_results[script_id] = parsed_result
+            self.parsed_results[script_id] = parsed_result.model_dump()
             self.document_cache[script_id] = documents
 
             # 添加到索引
@@ -151,7 +151,7 @@ class ScriptKnowledgeBase:
             # 保存存储
             if self.storage_dir:
                 self._save_storage()
-                self._save_parsed_result(script_id, parsed_result)
+                self._save_parsed_result(script_id, self.parsed_results[script_id])
 
             info(f"成功添加剧本: {script_id}, 包含{len(documents)}个文档")
 
@@ -193,7 +193,7 @@ class ScriptKnowledgeBase:
             parsed_result, documents = parse_script_file_to_documents(file_path)
 
             # 缓存解析结果
-            self.parsed_results[script_id] = parsed_result
+            self.parsed_results[script_id] = parsed_result.model_dump()
             self.document_cache[script_id] = documents
 
             # 添加到索引
@@ -202,7 +202,7 @@ class ScriptKnowledgeBase:
             # 保存存储
             if self.storage_dir:
                 self._save_storage()
-                self._save_parsed_result(script_id, parsed_result)
+                self._save_parsed_result(script_id, self.parsed_results[script_id])
 
             info(f"成功添加剧本文件: {file_path}, 包含{len(documents)}个文档")
 
@@ -388,25 +388,20 @@ class ScriptKnowledgeBase:
             error(f"查询失败: {str(e)}")
             raise
 
-    def query_scene(self, scene_number: int) -> Optional[Dict[str, Any]]:
+    def query_scene(self, scene_id: str) -> Optional[Dict[str, Any]]:
         """
-        根据场景编号查询场景信息
-        
+        根据场景ID查询场景信息
+
         Args:
-            scene_number: 场景编号
-            
-        Returns:
-            场景信息字典
+            scene_id: 场景ID (如 "scene_001")
         """
         try:
             for script_id, parsed_result in self.parsed_results.items():
                 for scene in parsed_result.get("scenes", []):
-                    if scene.get("number") == scene_number:
+                    if scene.get("id") == scene_id:
                         return scene
-
-            debug(f"未找到场景编号: {scene_number}")
+            debug(f"未找到场景: {scene_id}")
             return None
-
         except Exception as e:
             error(f"查询场景失败: {str(e)}")
             raise
@@ -588,13 +583,13 @@ class ScriptKnowledgeBase:
         except Exception as e:
             warning(f"保存存储失败: {str(e)}")
 
-    def _save_parsed_result(self, script_id: str, parsed_result: ParsedScript):
+    def _save_parsed_result(self, script_id: str, parsed_result: Dict[str, Any]):
         """
         保存解析结果
-        
+
         Args:
             script_id: 剧本ID
-            parsed_result: 解析结果
+            parsed_result: 解析结果字典
         """
         try:
             if self.storage_dir:
@@ -623,6 +618,13 @@ class ScriptKnowledgeBase:
         """
         # 简单检查，实际项目中可以更详细地检查检索器的配置
         return hasattr(self.retriever, '_retriever_mode') and self.retriever._retriever_mode == search_type
+
+    def _get_parser_tool(self):
+        """懒加载 ScriptParserTool"""
+        if self._parser_tool is None:
+            from penshot.neopen.tools.script_parser_tool import ScriptParserTool
+            self._parser_tool = ScriptParserTool()
+        return self._parser_tool
 
 
 def create_script_knowledge_base(embeddings, storage_dir=None) -> ScriptKnowledgeBase:

@@ -223,6 +223,10 @@ class PromptTemplateManager:
             except Exception as e:
                 warning(f"添加剧本到知识库失败: {e}")
 
+    def add_parsed_script(self, parsed_script, script_id=None):
+        """添加已解析的剧本到知识库"""
+        return self.script_kb.add_parsed_script(parsed_script, script_id)
+
     def is_script_kb_available(self) -> bool:
         """检查剧本知识库是否可用"""
         if not self.script_kb:

@@ -257,7 +257,7 @@ class KnowledgeRouter:
 
             # 尝试按场景编号查询
             if query.filter_scene_id and query.filter_scene_id.isdigit():
-                scene = self.script_kb.query_scene(int(query.filter_scene_id))
+                scene = self.script_kb.query_scene(query.filter_scene_id)
                 if scene:
                     results.append({
                         "content": f"场景{scene.get('number')}: {scene.get('description', '')}",
