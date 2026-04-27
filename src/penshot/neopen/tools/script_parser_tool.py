@@ -1,11 +1,9 @@
 """
 @FileName: script_parser_tool.py
-@Description: 剧本语法解析器模块
-            提供自定义剧本格式的解析功能，支持场景、角色、对话、动作等元素的提取
+@Description: 剧本语法解析器模块 - 支持中文剧本
 @Author: HiPeng
-@Github: https://github.com/neopen/story-shot-agent
-@Time: 2025/10 - 2025/11
 """
+
 import re
 from typing import Dict, List, Optional, Tuple
 
@@ -26,105 +24,179 @@ from penshot.utils.log_utils import print_log_exception
 
 class ScriptParserTool:
     """
-    自定义剧本语法解析器
-    支持标准剧本格式和自定义扩展格式的解析
+    剧本语法解析器 - 支持中文剧本和标准好莱坞格式
     """
 
-    # 剧本元素的正则表达式模式
-    SCENE_HEADING_PATTERN = re.compile(r'^(INT|EXT|INT\.|EXT\.|I/E)\.?\s+(.+)$', re.IGNORECASE)
-    CHARACTER_PATTERN = re.compile(r'^[A-Z0-9\s\-]+(?::\s*[A-Z0-9\s\-]+)?$')
-    TRANSITION_PATTERN = re.compile(r'^(CUT TO:|DISSOLVE TO:|FADE OUT:|FADE IN:|SMASH CUT TO:)$', re.IGNORECASE)
-    PARENTHETICAL_PATTERN = re.compile(r'^\([^)]+\)$')
+    # ========== 场景标题模式（支持中英文） ==========
+    # 英文标准格式: INT. 房间 - 白天
+    SCENE_HEADING_EN = re.compile(
+        r'^(INT|EXT|INT\.|EXT\.|I/E)\.?\s+(.+?)(?:\s*[-–]\s*)?(DAY|NIGHT|DUSK|DAWN|MORNING|AFTERNOON|EVENING|白天|夜晚|黄昏|黎明|早晨|下午|傍晚)?$',
+        re.IGNORECASE
+    )
 
-    def __init__(self, custom_patterns: Optional[Dict[str, re.Pattern]] = None):
+    # 中文格式1: 【场景1】房间 / 白天
+    SCENE_HEADING_CN1 = re.compile(
+        r'^[【\[]?场景\s*(\d+)[】\]]?\s*[:：]?\s*(.+?)(?:[\/\\]|\s+)(白天|夜晚|黄昏|黎明|早晨|下午|傍晚|室内|室外)?',
+        re.IGNORECASE
+    )
+
+    # 中文格式2: 第一场 房间 白天
+    SCENE_HEADING_CN2 = re.compile(
+        r'^第\s*(\d+)\s*场\s*[:：]?\s*(.+?)(?:\s+(白天|夜晚|黄昏|黎明|早晨|下午|傍晚))?',
+        re.IGNORECASE
+    )
+
+    # 中文格式3: 1. 房间 / 白天
+    SCENE_HEADING_CN3 = re.compile(
+        r'^(\d+)\.\s*(.+?)(?:\s+[\/\-]\s+)?(白天|夜晚|黄昏|黎明|早晨|下午|傍晚)?',
+        re.IGNORECASE
+    )
+
+    # 通用场景标题（兜底）
+    SCENE_HEADING_FALLBACK = re.compile(
+        r'^(?:第\s*(\d+)\s*[场幕回]|(?:【\[?场景\]?】?\s*)?(\d+)[\.:：]?)\s*(.+)$',
+        re.IGNORECASE
+    )
+
+    # ========== 角色名称模式 ==========
+    # 英文角色名（全大写）
+    CHARACTER_EN = re.compile(r'^[A-Z][A-Z\s\-]{1,20}$')
+
+    # 中文角色名（2-4个中文字符，可选括号标注）
+    CHARACTER_CN = re.compile(r'^[\u4e00-\u9fa5]{2,4}(?:\s*[（(][^）)]+[）)])?$')
+
+    # 角色名+冒号格式（中文剧本常见）
+    CHARACTER_WITH_COLON = re.compile(r'^([\u4e00-\u9fa5]{2,4}|[A-Z][a-z]+)\s*[:：]\s*$')
+
+    # ========== 转场模式（中英文） ==========
+    TRANSITION_PATTERNS = [
+        re.compile(r'^(CUT TO:|DISSOLVE TO:|FADE OUT:|FADE IN:|SMASH CUT TO:)', re.IGNORECASE),
+        re.compile(r'^(切换|淡入|淡出|叠化|黑场|白场)'),
+        re.compile(r'^={3,}$'),  # 分隔线
+        re.compile(r'^-{3,}$'),
+    ]
+
+    # ========== 括号说明模式（中英文） ==========
+    PARENTHETICAL_EN = re.compile(r'^\([^)]+\)$')
+    PARENTHETICAL_CN = re.compile(r'^[（(][^）)]+[）)]$')
+
+    # ========== 动作描述触发词 ==========
+    ACTION_TRIGGERS = [
+        "镜头", "特写", "远景", "中景", "近景", "摇移", "推拉",
+        "镜头", "画面", "背景", "音效", "音乐",
+    ]
+
+    def __init__(self, custom_patterns: Optional[Dict[str, re.Pattern]] = None,
+                 support_chinese: bool = True):
         """
         初始化解析器
 
         Args:
             custom_patterns: 自定义正则表达式模式字典
+            support_chinese: 是否支持中文格式
         """
         self.custom_patterns = custom_patterns or {}
+        self.support_chinese = support_chinese
 
         # 解析状态
         self.scenes: List[SceneInfo] = []
         self.characters: Dict[str, CharacterInfo] = {}
         self.global_metadata = GlobalMetadata()
 
-        # 临时存储用于构建
+        # 临时存储
         self._current_scene: Optional[SceneInfo] = None
         self._current_element: Optional[Dict] = None
         self._element_sequence: int = 0
 
+        # 统计
+        self._debug_stats = {"total_lines": 0, "matched_scenes": 0, "matched_characters": 0}
+
     def parse(self, script_text: str) -> ParsedScript:
         """
         解析剧本文本，返回 ParsedScript 对象
-
-        Args:
-            script_text: 剧本文本内容
-
-        Returns:
-            ParsedScript 对象
         """
         try:
             debug("开始解析剧本文本")
 
-            # 重置解析状态
-            self.scenes = []
-            self.characters = {}
-            self._current_scene = None
-            self._current_element = None
-            self._element_sequence = 0
-            self.global_metadata = GlobalMetadata()
+            # 重置状态
+            self._reset_state()
 
             lines = script_text.strip().split('\n')
+            self._debug_stats["total_lines"] = len(lines)
+
+            info(f"开始解析，共 {len(lines)} 行")
+
             scene_number = 0
 
-            # 逐行解析
-            for line_num, line in enumerate(lines, 1):
-                line = line.strip()
+            # 第一遍：识别行类型
+            line_types = self._classify_lines(lines)
 
-                # 跳过空行
+            # 第二遍：构建场景结构
+            i = 0
+            while i < len(lines):
+                line = lines[i].strip()
+                line_type = line_types[i] if i < len(line_types) else "unknown"
+
                 if not line:
-                    self._finalize_current_element(line_num)
+                    self._finalize_current_element(i + 1)
+                    i += 1
                     continue
 
                 # 检查是否是场景标题
-                scene_heading_match = self.SCENE_HEADING_PATTERN.match(line)
-                if scene_heading_match:
+                scene_match, scene_num, scene_loc, scene_time = self._match_scene_heading(line)
+                if scene_match:
                     # 结束前一个场景
                     self._finalize_current_scene()
 
                     # 开始新场景
                     scene_number += 1
-                    self._start_new_scene(line, scene_heading_match, scene_number, line_num)
+                    actual_scene_num = scene_num or scene_number
+                    self._start_new_scene(
+                        heading=line,
+                        location=scene_loc or line,
+                        time_of_day=scene_time,
+                        scene_number=actual_scene_num,
+                        line_num=i + 1
+                    )
+                    self._debug_stats["matched_scenes"] += 1
+                    i += 1
                     continue
 
                 # 检查是否是角色对话
-                if self._is_character_line(line):
-                    self._handle_character_line(line, lines, line_num)
+                character_name = self._match_character(line)
+                if character_name:
+                    # 处理角色对话
+                    i = self._handle_character_line(
+                        character_name, lines, i, line_types
+                    )
                     continue
 
                 # 检查是否是转场
-                if self.TRANSITION_PATTERN.match(line):
-                    self._handle_transition(line, line_num)
+                if self._match_transition(line):
+                    self._handle_transition(line, i + 1)
+                    i += 1
                     continue
 
                 # 检查是否是括号说明
-                if self.PARENTHETICAL_PATTERN.match(line):
-                    self._handle_parenthetical(line, line_num)
+                if self._match_parenthetical(line):
+                    self._handle_parenthetical(line, i + 1)
+                    i += 1
                     continue
 
                 # 否则视为动作描述
-                self._handle_action(line, line_num)
+                self._handle_action(line, i + 1)
+                i += 1
 
             # 处理最后一个场景和元素
             self._finalize_current_element(len(lines))
             self._finalize_current_scene()
 
-            # 构建 ParsedScript 对象
+            # 构建结果
             parsed_script = self._build_parsed_script()
 
             info(f"剧本解析完成: {len(parsed_script.scenes)}个场景, {len(parsed_script.characters)}个角色")
+            debug(f"解析统计: {self._debug_stats}")
+
             return parsed_script
 
         except Exception as e:
@@ -132,32 +204,145 @@ class ScriptParserTool:
             error(f"剧本解析失败: {str(e)}")
             raise
 
-    def _start_new_scene(self, line: str, match: re.Match, scene_number: int, line_num: int):
+    def _reset_state(self):
+        """重置解析状态"""
+        self.scenes = []
+        self.characters = {}
+        self._current_scene = None
+        self._current_element = None
+        self._element_sequence = 0
+        self.global_metadata = GlobalMetadata()
+        self._debug_stats = {"total_lines": 0, "matched_scenes": 0, "matched_characters": 0}
+
+    def _classify_lines(self, lines: List[str]) -> List[str]:
+        """预分类行类型（用于更准确的解析）"""
+        line_types = []
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                line_types.append("empty")
+            elif self._match_scene_heading(line)[0]:
+                line_types.append("scene")
+            elif self._match_character(line):
+                line_types.append("character")
+            elif self._match_transition(line):
+                line_types.append("transition")
+            elif self._match_parenthetical(line):
+                line_types.append("parenthetical")
+            else:
+                line_types.append("action")
+
+        return line_types
+
+    def _match_scene_heading(self, line: str) -> Tuple[bool, Optional[int], Optional[str], Optional[str]]:
+        """
+        匹配场景标题
+
+        Returns:
+            (是否匹配, 场景编号, 场景地点, 时间段)
+        """
+        # 英文格式
+        match_en = self.SCENE_HEADING_EN.match(line)
+        if match_en:
+            location = match_en.group(2) or line
+            time_of_day = match_en.group(3)
+            return True, None, location, time_of_day
+
+        if self.support_chinese:
+            # 中文格式1: 【场景1】房间 / 白天
+            match_cn1 = self.SCENE_HEADING_CN1.match(line)
+            if match_cn1:
+                scene_num = int(match_cn1.group(1))
+                location = match_cn1.group(2)
+                time_of_day = match_cn1.group(3)
+                return True, scene_num, location, time_of_day
+
+            # 中文格式2: 第一场 房间 白天
+            match_cn2 = self.SCENE_HEADING_CN2.match(line)
+            if match_cn2:
+                scene_num = int(match_cn2.group(1))
+                location = match_cn2.group(2)
+                time_of_day = match_cn2.group(3)
+                return True, scene_num, location, time_of_day
+
+            # 中文格式3: 1. 房间 / 白天
+            match_cn3 = self.SCENE_HEADING_CN3.match(line)
+            if match_cn3:
+                scene_num = int(match_cn3.group(1))
+                location = match_cn3.group(2)
+                time_of_day = match_cn3.group(3)
+                return True, scene_num, location, time_of_day
+
+            # 兜底格式
+            match_fallback = self.SCENE_HEADING_FALLBACK.match(line)
+            if match_fallback:
+                scene_num = match_fallback.group(1) or match_fallback.group(2)
+                location = match_fallback.group(3)
+                if scene_num:
+                    scene_num = int(scene_num)
+                return True, scene_num, location, None
+
+        return False, None, None, None
+
+    def _match_character(self, line: str) -> Optional[str]:
+        """
+        匹配角色名称
+
+        Returns:
+            角色名或 None
+        """
+        # 英文格式
+        if self.CHARACTER_EN.match(line):
+            return line.strip()
+
+        if self.support_chinese:
+            # 中文格式: 角色名 + 冒号
+            match_colon = self.CHARACTER_WITH_COLON.match(line)
+            if match_colon:
+                return match_colon.group(1)
+
+            # 纯中文角色名
+            if self.CHARACTER_CN.match(line):
+                return line.strip()
+
+        return None
+
+    def _match_transition(self, line: str) -> bool:
+        """匹配转场标记"""
+        for pattern in self.TRANSITION_PATTERNS:
+            if pattern.match(line):
+                return True
+        return False
+
+    def _match_parenthetical(self, line: str) -> bool:
+        """匹配括号说明"""
+        if self.PARENTHETICAL_EN.match(line):
+            return True
+        if self.support_chinese and self.PARENTHETICAL_CN.match(line):
+            return True
+        return False
+
+    def _start_new_scene(self, heading: str, location: str, time_of_day: Optional[str],
+                         scene_number: int, line_num: int):
         """开始新场景"""
-        heading_text = line
-        location_type = match.group(1)
-        location_info = match.group(2)
-
-        # 尝试提取时间信息
-        time_of_day = None
-        time_match = re.search(r'(?:\s|\()(DAY|NIGHT|DUSK|DAWN|MORNING|AFTERNOON|EVENING)(?:\)|\s|$)',
-                               location_info, re.IGNORECASE)
-        if time_match:
-            time_of_day = time_match.group(1).upper()
-
-        # 创建场景
         scene_id = f"scene_{scene_number:03d}"
+
+        # 清理位置描述
+        location = re.sub(r'^(INT|EXT|INT\.|EXT\.|I/E)\.?\s*', '', location, flags=re.IGNORECASE)
+
         self._current_scene = SceneInfo(
             id=scene_id,
-            location=f"{location_type}. {location_info}",
-            description=heading_text,
+            location=location.strip(),
+            description=heading,
             time_of_day=time_of_day,
             elements=[]
         )
 
-        debug(f"识别到场景 {scene_number}: {heading_text} (行号: {line_num})")
+        debug(f"识别到场景 {scene_number}: {heading[:50]} (行号: {line_num})")
 
-    def _start_new_element(self, element_type: str, content: str, line_num: int, metadata: Optional[Dict] = None):
+    def _start_new_element(self, element_type: str, content: str, line_num: int,
+                           metadata: Optional[Dict] = None):
         """开始新元素"""
         self._element_sequence += 1
         self._current_element = {
@@ -174,7 +359,6 @@ class ScriptParserTool:
         if self._current_element:
             self._current_element["end_line"] = line_num - 1
 
-            # 转换为 BaseElement 对象
             element = self._create_element_from_dict(self._current_element)
 
             if element and self._current_scene:
@@ -184,7 +368,8 @@ class ScriptParserTool:
 
     def _finalize_current_scene(self):
         """结束当前场景"""
-        if self._current_scene and self._current_scene.elements:
+        if self._current_scene:
+            # 即使没有元素也保存场景
             self.scenes.append(self._current_scene)
             self._current_scene = None
 
@@ -204,17 +389,16 @@ class ScriptParserTool:
         else:
             elem_type = ElementType.SCENE
 
-        # 估算持续时间（基于内容长度）
-        duration = max(1.0, len(content) / 15.0)  # 粗略估算：每15个字符1秒
+        # 估算持续时间
+        duration = max(1.0, min(10.0, len(content) / 15.0))
 
-        # 创建 BaseElement
         element_id = f"elem_{self._element_sequence:04d}"
 
         return BaseElement(
             id=element_id,
             type=elem_type,
             sequence=self._element_sequence,
-            duration=min(duration, 10.0),  # 最大10秒
+            duration=duration,
             confidence=0.8,
             content=content,
             character=metadata.get("character"),
@@ -225,45 +409,43 @@ class ScriptParserTool:
             audio_context=metadata.get("audio_context")
         )
 
-    def _handle_character_line(self, line: str, lines: List[str], line_num: int):
-        """处理角色对话行"""
-        character_name = line.strip()
+    def _handle_character_line(self, character_name: str, lines: List[str],
+                               idx: int, line_types: List[str]) -> int:
+        """处理角色对话行，返回下一个索引"""
+        line_num = idx + 1
 
         # 添加角色
         self._add_character(character_name, line_num)
 
-        # 如果当前场景存在，添加角色
-        if self._current_scene and character_name not in self._get_scene_characters():
-            # 角色会在场景的元素中体现，不需要单独存储
-            pass
-
-        # 检查下一行是否是对话
+        # 收集对话内容
         dialogue_lines = []
-        dialogue_start = line_num + 1
-        dialogue_end = dialogue_start
+        next_idx = idx + 1
 
-        while dialogue_end <= len(lines):
-            next_line = lines[dialogue_end - 1].strip()
-            # 如果下一行是空行、场景标题、角色名称或转场，结束对话
-            if not next_line or \
-                    self.SCENE_HEADING_PATTERN.match(next_line) or \
-                    self._is_character_line(next_line) or \
-                    self.TRANSITION_PATTERN.match(next_line) or \
-                    self.PARENTHETICAL_PATTERN.match(next_line):
+        while next_idx < len(lines):
+            next_line = lines[next_idx].strip()
+            next_type = line_types[next_idx] if next_idx < len(line_types) else "unknown"
+
+            # 遇到空行、场景、角色、转场、括号说明时结束对话
+            if not next_line or next_type in ["scene", "character", "transition"]:
                 break
+
+            # 括号说明单独处理
+            if next_type == "parenthetical":
+                # 括号说明可以作为对话的一部分或单独元素
+                dialogue_lines.append(next_line)
+                next_idx += 1
+                continue
+
             dialogue_lines.append(next_line)
-            dialogue_end += 1
+            next_idx += 1
 
         if dialogue_lines:
             dialogue_content = '\n'.join(dialogue_lines)
 
-            # 更新角色对话计数
-            if character_name in self.characters:
-                # 可以在 CharacterInfo 中添加 dialogue_count 字段
-                pass
+            # 结束之前的元素
+            self._finalize_current_element(line_num)
 
             # 开始新对话元素
-            self._finalize_current_element(line_num)
             self._start_new_element(
                 "dialogue",
                 dialogue_content,
@@ -271,9 +453,9 @@ class ScriptParserTool:
                 {"character": character_name}
             )
 
-            # 跳过已处理的对话行
-            for _ in range(dialogue_end - line_num - 1):
-                pass
+            self._debug_stats["matched_characters"] += 1
+
+        return next_idx
 
     def _handle_transition(self, line: str, line_num: int):
         """处理转场"""
@@ -291,68 +473,33 @@ class ScriptParserTool:
             self._finalize_current_element(line_num)
             self._start_new_element("action", line, line_num)
         else:
-            # 继续上一个动作描述
             self._current_element["content"] += '\n' + line
             self._current_element["end_line"] = line_num
 
-    def _is_character_line(self, line: str) -> bool:
-        """
-        判断是否是角色名称行
-
-        Args:
-            line: 文本行
-
-        Returns:
-            是否是角色名称行
-        """
-        # 角色名称通常全大写，可能包含空格、连字符和数字
-        if not line.isupper():
-            return False
-
-        # 排除括号说明
-        if self.PARENTHETICAL_PATTERN.match(line):
-            return False
-
-        # 应用角色名称模式
-        if self.CHARACTER_PATTERN.match(line):
-            # 排除太短的行，避免误判
-            words = line.split()
-            if len(words) == 1 and len(line) < 2:
-                return False
-            return True
-
-        return False
-
     def _add_character(self, character_name: str, line_num: int):
-        """
-        添加角色信息
-
-        Args:
-            character_name: 角色名称
-            line_num: 行号
-        """
+        """添加角色信息"""
         if character_name not in self.characters:
-            # 尝试推断角色性别（基于名称中的常见字）
+            # 推断性别
             gender = "unknown"
-            if any(keyword in character_name for keyword in ["小姐", "女士", "女", "妹", "姐"]):
+            if any(kw in character_name for kw in ["小姐", "女士", "女", "妹", "姐", "母", "妈"]):
                 gender = "female"
-            elif any(keyword in character_name for keyword in ["先生", "男士", "男", "哥", "弟", "叔"]):
+            elif any(kw in character_name for kw in ["先生", "男士", "男", "哥", "弟", "叔", "父", "爸"]):
                 gender = "male"
 
             self.characters[character_name] = CharacterInfo(
                 name=character_name,
                 gender=gender,
-                role="supporting",  # 默认为配角，后续可优化
+                role="supporting",
                 type=CharacterType.DEFAULT,
                 description=None,
                 key_traits=[]
             )
+            debug(f"识别到角色: {character_name}")
 
     def _get_scene_characters(self) -> List[str]:
         """获取当前场景的角色列表"""
         if not self._current_scene:
             return []
-        # 从场景元素中提取角色
         characters = set()
         for elem in self._current_scene.elements:
             if hasattr(elem, 'character') and elem.character:
@@ -378,11 +525,10 @@ class ScriptParserTool:
                 elif elem.type == ElementType.ACTION:
                     action_count += 1
 
-        # 计算完整性评分
-        completeness_score = min(100.0, (len(self.scenes) / 10) * 100) if self.scenes else 0
+        completeness_score = min(100.0, (len(self.scenes) / 20) * 100) if self.scenes else 0
 
         return ParsedScript(
-            title=None,  # 可从剧本中提取
+            title=None,
             characters=list(self.characters.values()),
             scenes=self.scenes,
             global_metadata=self.global_metadata,
@@ -396,30 +542,19 @@ class ScriptParserTool:
                 "character_count": len(self.characters)
             },
             metadata={
-                "parsed_at": None,  # 将在模型中自动填充
+                "parsed_at": None,
                 "version": "1.0",
                 "parser_type": "ScriptParserTool"
             }
         )
 
     def parse_file(self, file_path: str) -> ParsedScript:
-        """
-        从文件解析剧本
-
-        Args:
-            file_path: 文件路径
-
-        Returns:
-            ParsedScript 对象
-        """
+        """从文件解析剧本"""
         try:
             debug(f"开始解析剧本文件: {file_path}")
-
             with open(file_path, 'r', encoding='utf-8') as f:
                 script_text = f.read()
-
             return self.parse(script_text)
-
         except FileNotFoundError:
             error(f"文件不存在: {file_path}")
             raise
@@ -428,66 +563,38 @@ class ScriptParserTool:
             raise
 
     def create_documents(self, parsed_script: ParsedScript) -> List[Document]:
-        """
-        从 ParsedScript 对象创建 Document 对象列表（用于 LlamaIndex）
-
-        Args:
-            parsed_script: ParsedScript 对象
-
-        Returns:
-            Document 对象列表
-        """
+        """从 ParsedScript 创建 Document 对象列表"""
         documents = []
 
-        try:
-            # 为每个场景创建文档
-            for scene in parsed_script.scenes:
-                scene_content = self._scene_to_text(scene)
+        for scene in parsed_script.scenes:
+            scene_content = self._scene_to_text(scene)
+            scene_metadata = {
+                "type": "scene",
+                "scene_id": scene.id,
+                "location": scene.location,
+                "time_of_day": scene.time_of_day,
+                "element_count": len(scene.elements)
+            }
+            documents.append(Document(text=scene_content, metadata=scene_metadata))
 
-                scene_metadata = {
-                    "type": "scene",
-                    "scene_id": scene.id,
-                    "location": scene.location,
-                    "time_of_day": scene.time_of_day,
-                    "element_count": len(scene.elements)
-                }
+        for character in parsed_script.characters:
+            character_content = self._character_to_text(character)
+            character_metadata = {
+                "type": "character",
+                "character_name": character.name,
+                "gender": character.gender,
+                "role": character.role
+            }
+            documents.append(Document(text=character_content, metadata=character_metadata))
 
-                scene_doc = Document(
-                    text=scene_content,
-                    metadata=scene_metadata
-                )
-                documents.append(scene_doc)
-
-            # 为每个角色创建文档
-            for character in parsed_script.characters:
-                character_content = self._character_to_text(character)
-
-                character_metadata = {
-                    "type": "character",
-                    "character_name": character.name,
-                    "gender": character.gender,
-                    "role": character.role
-                }
-
-                character_doc = Document(
-                    text=character_content,
-                    metadata=character_metadata
-                )
-                documents.append(character_doc)
-
-            info(f"从解析结果创建了 {len(documents)} 个文档")
-            return documents
-
-        except Exception as e:
-            error(f"创建文档失败: {str(e)}")
-            raise
+        info(f"从解析结果创建了 {len(documents)} 个文档")
+        return documents
 
     def _scene_to_text(self, scene: SceneInfo) -> str:
         """将场景转换为文本"""
         from penshot.neopen.agent.base_models import ElementType
 
-        content = f"场景 ID: {scene.id}\n"
-        content += f"地点: {scene.location}\n"
+        content = f"场景 ID: {scene.id}\n地点: {scene.location}\n"
         if scene.time_of_day:
             content += f"时间: {scene.time_of_day}\n"
         if scene.description:
@@ -506,9 +613,7 @@ class ScriptParserTool:
 
     def _character_to_text(self, character: CharacterInfo) -> str:
         """将角色转换为文本"""
-        content = f"角色名称: {character.name}\n"
-        content += f"性别: {character.gender}\n"
-        content += f"类型: {character.role}\n"
+        content = f"角色名称: {character.name}\n性别: {character.gender}\n类型: {character.role}\n"
         if character.description:
             content += f"描述: {character.description}\n"
         if character.key_traits:
@@ -519,32 +624,16 @@ class ScriptParserTool:
 # ========== 便捷函数 ==========
 
 def parse_script_to_documents(script_text: str) -> Tuple[ParsedScript, List[Document]]:
-    """
-    解析剧本文本并创建文档对象
-
-    Args:
-        script_text: 剧本文本
-
-    Returns:
-        (ParsedScript 对象, 文档列表) 元组
-    """
-    parser = ScriptParserTool()
+    """解析剧本文本并创建文档对象"""
+    parser = ScriptParserTool(support_chinese=True)
     parsed_script = parser.parse(script_text)
     documents = parser.create_documents(parsed_script)
     return parsed_script, documents
 
 
 def parse_script_file_to_documents(file_path: str) -> Tuple[ParsedScript, List[Document]]:
-    """
-    解析剧本文件并创建文档对象
-
-    Args:
-        file_path: 文件路径
-
-    Returns:
-        (ParsedScript 对象, 文档列表) 元组
-    """
-    parser = ScriptParserTool()
+    """解析剧本文件并创建文档对象"""
+    parser = ScriptParserTool(support_chinese=True)
     parsed_script = parser.parse_file(file_path)
     documents = parser.create_documents(parsed_script)
     return parsed_script, documents
