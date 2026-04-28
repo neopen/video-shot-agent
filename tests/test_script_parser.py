@@ -9,6 +9,7 @@ import json
 import os
 import sys
 
+from penshot import ShotConfig
 from penshot.neopen.client.client_factory import get_default_llm
 
 # 添加项目根目录到Python路径
@@ -25,7 +26,7 @@ def example_basic_script_parsing():
     print("=== 基础剧本解析示例 ===")
 
     # 初始化智能体（不需要LLM也可以工作）
-    parser_agent = ScriptParserAgent(get_default_llm())
+    parser_agent = ScriptParserAgent(get_default_llm(), ShotConfig())
 
     # 简单的中文剧本示例
     script_text = """
@@ -55,7 +56,7 @@ def example_with_character_appearance():
     """
     print("\n=== 角色外观推断示例 ===")
 
-    parser_agent = ScriptParserAgent(get_default_llm())
+    parser_agent = ScriptParserAgent(get_default_llm(), ShotConfig())
 
     # 包含更多角色描述线索的剧本
     script_text = """
@@ -89,7 +90,7 @@ def example_emotion_recognition():
     """
     print("\n=== 情绪识别示例 ===")
 
-    parser_agent = ScriptParserAgent(get_default_llm())
+    parser_agent = ScriptParserAgent(get_default_llm(), ShotConfig())
 
     # 包含丰富情绪表达的剧本
     script_text = """
@@ -127,7 +128,7 @@ def example_complex_scene_parsing():
     """
     print("\n=== 复杂场景解析示例 ===")
 
-    parser_agent = ScriptParserAgent(get_default_llm())
+    parser_agent = ScriptParserAgent(get_default_llm(), ShotConfig())
 
     # 复杂剧本示例，包含多个场景转换
     script_text = """
@@ -162,7 +163,7 @@ def example_comprehensive_analysis():
     """
     print("\n=== 综合分析示例 ===")
 
-    parser_agent = ScriptParserAgent(get_default_llm())
+    parser_agent = ScriptParserAgent(get_default_llm(), ShotConfig())
 
     # 综合剧本示例
     script_text = """
