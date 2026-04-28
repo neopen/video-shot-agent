@@ -11,6 +11,7 @@ from typing import Optional, List, Dict
 from penshot.logger import debug, error, info
 from penshot.neopen.agent.base_models import AgentMode
 from penshot.neopen.agent.base_repairable_agent import BaseRepairableAgent
+from penshot.neopen.agent.continuity_guardian.consistency_contract import GlobalConsistencyContract
 from penshot.neopen.agent.prompt_converter.prompt_converter_factory import PromptConverterFactory
 from penshot.neopen.agent.prompt_converter.prompt_converter_models import AIVideoInstructions, AIVideoPrompt
 from penshot.neopen.agent.quality_auditor.quality_auditor_models import BasicViolation, SeverityLevel, IssueType, RuleType
@@ -142,6 +143,52 @@ class PromptConverterAgent(BaseRepairableAgent[AIVideoInstructions, FragmentSequ
         successful_patterns = self.current_historical_context.get("successful_patterns")
         if successful_patterns:
             debug(f"已加载 {len(successful_patterns) if isinstance(successful_patterns, list) else 1} 条成功模式")
+
+
+    def process_with_style_consistency(self, fragment_sequence: FragmentSequence,
+                                       parsed_script: ParsedScript,
+                                       contract: GlobalConsistencyContract) -> Optional[AIVideoInstructions]:
+        """带风格一致性的提示词生成"""
+
+        instructions = self.prompt_process(fragment_sequence, parsed_script)
+
+        if not instructions or not contract:
+            return instructions
+
+        # 应用风格锚点
+        style_anchor = contract.style_anchor
+        if style_anchor:
+            genre = style_anchor.get("genre", "")
+            style_desc = style_anchor.get("description", "")
+
+            # 为每个片段添加风格一致性前缀
+            style_prefix = self._build_style_prefix(genre, style_desc)
+
+            for fragment in instructions.fragments:
+                if style_prefix and style_prefix not in fragment.prompt:
+                    fragment.prompt = f"{style_prefix} {fragment.prompt}"
+
+        return instructions
+
+    def _build_style_prefix(self, genre: str, style_desc: str) -> str:
+        """构建风格前缀"""
+        prefix_parts = []
+
+        genre_style_map = {
+            "action": "dynamic cinematography, fast-paced editing",
+            "drama": "naturalistic lighting, emotional depth",
+            "comedy": "bright colors, lively camera work",
+            "horror": "dark atmosphere, unsettling angles",
+            "sci-fi": "futuristic aesthetic, sleek design",
+        }
+
+        if genre in genre_style_map:
+            prefix_parts.append(genre_style_map[genre])
+
+        if style_desc and len(style_desc) < 50:
+            prefix_parts.append(style_desc)
+
+        return f"[Style: {', '.join(prefix_parts)}]" if prefix_parts else ""
 
 
     def prompt_process(self, fragment_sequence: FragmentSequence, parsed_script: ParsedScript) -> Optional[AIVideoInstructions]:

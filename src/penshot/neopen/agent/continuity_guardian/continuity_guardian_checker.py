@@ -6,9 +6,10 @@
 """
 import time
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from penshot.neopen.agent.workflow.workflow_models import PipelineNode
+from .consistency_contract import GlobalConsistencyContract
 from .continuity_guardian_models import (
     ContinuityIssue, ContinuityIssueType, ContinuitySeverity,
     CharacterState, StateSnapshot, StateTimeline, ContinuityCheckResult
@@ -111,6 +112,72 @@ class ContinuityGuardianChecker:
                         prompt.fragment_id,
                         result
                     )
+
+
+    def check_with_contract(self, context: Dict[str, Any],
+                            contract: GlobalConsistencyContract) -> ContinuityCheckResult:
+        """带契约的连续性检查"""
+        result = ContinuityCheckResult()
+
+        # 1. 基础检查
+        self.check_character_continuity(context, result)
+        self.check_scene_continuity(context, result)
+        self.check_time_continuity(context, result)
+
+        # 2. 契约验证
+        if contract:
+            # 检查角色出现一致性
+            for issue in contract.get_character_appearance_consistency():
+                result.add_issue(self._create_issue(
+                    issue_type=ContinuityIssueType.CHARACTER_MISSING,
+                    description=issue.get("suggestion", ""),
+                    severity=ContinuitySeverity(issue.get("severity", "moderate")),
+                    suggestion=issue.get("suggestion"),
+                    source_stage=PipelineNode.CONTINUITY_CHECK
+                ))
+
+            # 检查场景一致性
+            scene_issues = self._check_scene_consistency_with_contract(context, contract)
+            for issue in scene_issues:
+                result.add_issue(issue)
+
+        return result
+
+    def _check_scene_consistency_with_contract(self, context: Dict,
+                                               contract: GlobalConsistencyContract) -> List[ContinuityIssue]:
+        """检查场景与契约的一致性"""
+        issues = []
+        shot_sequence = context.get("shot_sequence")
+
+        if not shot_sequence:
+            return issues
+
+        # 追踪场景中出现的角色
+        scene_characters = {}
+        for shot in shot_sequence.shots:
+            if shot.scene_id not in scene_characters:
+                scene_characters[shot.scene_id] = set()
+            if shot.main_character:
+                scene_characters[shot.scene_id].add(shot.main_character)
+
+        # 验证每个场景是否有契约中定义的角色
+        for scene_num, scene_contract in contract.scenes.items():
+            scene_key = f"scene_{scene_num:03d}"
+            if scene_key in scene_characters:
+                missing_chars = set(scene_contract.characters_in_scene) - scene_characters[scene_key]
+                if missing_chars:
+                    issues.append(self._create_issue(
+                        issue_type=ContinuityIssueType.CHARACTER_MISSING,
+                        description=f"场景{scene_num}缺失角色: {', '.join(missing_chars)}",
+                        severity=ContinuitySeverity.MAJOR,
+                        scene_id=scene_key,
+                        suggestion="为缺失的角色添加镜头",
+                        source_stage=PipelineNode.CONTINUITY_CHECK,
+                        auto_fixable=True
+                    ))
+
+        return issues
+
 
     def _check_character_appearance_continuity(self, character: str, prompt: str,
                                                index: int, fragment_id: str,

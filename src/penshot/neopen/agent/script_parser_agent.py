@@ -13,6 +13,7 @@ from penshot.logger import debug, info, warning
 from penshot.neopen.agent.script_parser.llm_script_parser import LLMScriptParser
 from .base_models import AgentMode, ScriptType, ElementType
 from .base_repairable_agent import BaseRepairableAgent
+from .continuity_guardian.consistency_contract import GlobalConsistencyContract, SceneContract
 from .quality_auditor.quality_auditor_models import BasicViolation, SeverityLevel, IssueType, RuleType
 from .script_parser.rule_script_parser import RuleScriptParser
 from .script_parser.script_parser_models import ParsedScript, SceneInfo, CharacterInfo, CharacterType
@@ -174,6 +175,49 @@ class ScriptParserAgent(BaseRepairableAgent[ParsedScript, str]):
         debug(f"   发现问题: {len(issues)}个")
 
         return parsed_script
+
+
+    def process_with_contract(self, script_text: str, knowledge_manager=None,
+                              script_id=None, contract: GlobalConsistencyContract = None) -> Tuple[Optional[ParsedScript], GlobalConsistencyContract]:
+        """带契约的剧本解析"""
+
+        parsed_script = self.parser_process(script_text)
+
+        if not parsed_script:
+            return None, contract
+
+        # 创建或更新契约
+        if contract is None:
+            contract = GlobalConsistencyContract(
+                script_id=script_id or f"script_{int(time.time())}",
+                task_id=script_id or f"task_{int(time.time())}"
+            )
+
+        # 从解析结果填充契约
+        for scene in parsed_script.scenes:
+            scene_contract = SceneContract(
+                scene_num=scene.number,
+                location=getattr(scene, 'location', 'unknown'),
+                time_of_day=getattr(scene, 'time_of_day', 'day'),
+                characters_in_scene=[c.name for c in parsed_script.characters if c.name in scene.get_characters()],
+                main_emotion=getattr(scene, 'emotion', 'neutral')
+            )
+            contract.register_scene(scene_contract)
+
+        # 提取风格锚点
+        if hasattr(parsed_script, 'genre'):
+            contract.set_style_anchor("genre", parsed_script.genre)
+        if hasattr(parsed_script, 'style_description'):
+            contract.set_style_anchor("description", parsed_script.style_description[:200])
+
+        # 保存到知识库
+        if knowledge_manager:
+            knowledge_manager.add_parsed_script(parsed_script, script_id)
+            # 同时保存契约
+            knowledge_manager.save_contract(contract)
+
+        return parsed_script, contract
+
 
     def detect_parse_issues(self, parsed_script: ParsedScript, original_text: str) -> List[BasicViolation]:
         """
