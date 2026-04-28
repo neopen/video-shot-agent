@@ -1,0 +1,55 @@
+# .pre-commit-config.yaml
+# 文档: https://pre-commit.com
+# 更新所有 hooks 到最新稳定版: pre-commit autoupdate
+
+repos:
+  # ================= 1. 基础文件规范检查 =================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace          # 清除行尾空格
+      - id: end-of-file-fixer            # 确保文件以换行符结尾
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+      - id: check-toml                   # 检查 pyproject.toml 等
+      - id: check-json                   # 检查 json 文件语法
+      - id: check-added-large-files
+        args: ['--maxkb=5000']           # 阻止提交 >5MB 的文件
+      - id: detect-private-key           # 检测意外提交的私钥
+
+  # ================= 2. Python 格式化 & Lint (Ruff) =================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      # 代码检查 & 自动修复
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+      # 代码格式化 (替代 black)
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # ================= 3. 静态类型检查 (Mypy) =================
+  # 提示: 大型项目首次运行较慢，可考虑移至 CI 或添加 --follow-imports=skip
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+        args: [--ignore-missing-imports, --show-error-codes, --pretty]
+        additional_dependencies: []  # 按需添加: [types-requests, types-PyYAML]
+        types_or: [python, pyi]
+
+  # ================= 4. Markdown 文档格式化 =================
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.21
+    hooks:
+      - id: mdformat
+        args: [--number]  # 自动整理列表编号
+        types_or: [markdown]
+
+  # ================= 5. Shell 脚本检查 (可选) =================
+  # 取消注释即可启用
+  # - repo: https://github.com/shellcheck-py/shellcheck-py
+  #   rev: v0.10.0.1
+  #   hooks:
+  #     - id: shellcheck
