@@ -7,7 +7,6 @@
 """
 
 import asyncio
-import threading
 import time
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Callable
@@ -54,41 +53,11 @@ class TaskFactory:
 
         self._batch_tasks: Dict[str, List[str]] = {}  # batch_id -> list of task_ids
 
-        # 启动后台任务处理线程
-        self._background_thread: Optional[threading.Thread] = None
-        self._start_background_processor()
-
         info(f"任务工厂初始化完成，最大并发: {max_concurrent}")
 
-    def _start_background_processor(self):
-        """启动后台任务处理器"""
-        def run_processor():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            self.processor._background_loop = loop
-            try:
-                loop.run_forever()
-            except Exception as e:
-                error(f"后台处理器循环异常: {e}")
-            finally:
-                loop.close()
-
-        self._background_thread = threading.Thread(target=run_processor, daemon=True)
-        self._background_thread.start()
-
-        timeout = 5
-        start = time.time()
-        while not hasattr(self.processor, '_background_loop') or self.processor._background_loop is None:
-            if time.time() - start > timeout:
-                error("后台处理器启动超时")
-                break
-            time.sleep(0.01)
-
-        info("后台任务处理器已启动")
-
     def _run_async_in_background(self, coro):
-        """在后台事件循环中运行协程"""
-        if not hasattr(self.processor, '_background_loop') or self.processor._background_loop is None:
+        """复用处理器的后台事件循环运行协程"""
+        if self.processor._background_loop is None:
             raise RuntimeError("后台事件循环未启动")
         return asyncio.run_coroutine_threadsafe(coro, self.processor._background_loop)
 
@@ -662,7 +631,7 @@ class TaskFactory:
         info("任务工厂已关闭")
 
     #     ============================ 恢复任务 ================================
-    def recover_pending_tasks(self, max_age_hours: int = 2):
+    def recover_pending_tasks(self, max_age_hours: int = 2) -> int:
         """
         恢复所有未完成的任务（只恢复两小时内的任务）
 
@@ -687,6 +656,8 @@ class TaskFactory:
             info(f"已恢复 {len(recovered_ids)} 个任务（{max_age_hours}小时内）")
         else:
             info(f"没有需要恢复的任务（{max_age_hours}小时内）")
+
+        return len(recovered_ids)
 
 
     def get_pending_tasks(self, max_age_hours: int = 2) -> List[Dict[str, Any]]:

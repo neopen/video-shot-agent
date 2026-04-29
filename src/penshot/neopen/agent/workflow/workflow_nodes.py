@@ -1787,7 +1787,7 @@ class WorkflowNodes:
         """更新任务进度"""
         try:
             if self.task_manager:
-                self.task_manager.update_task_progress_detail(task_id, stage, progress, details)
+                self.task_manager.update_progress(task_id, stage, progress, details)
         except Exception as e:
             warning(f"更新任务进度失败: {e}")
             print_log_exception()

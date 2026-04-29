@@ -15,8 +15,11 @@ from .task_models import (
 )
 
 from .task_manager import TaskManager
+from .task_lifecycle_service import TaskLifecycleService
 from .task_processor import AsyncTaskProcessor
 from .task_handler import CallbackHandler
+from .task_repository import TaskRepository
+from .workflow_registry import WorkflowRegistry
 
 __all__ = [
     # models
@@ -28,6 +31,9 @@ __all__ = [
     "TaskStatus",
     # runtime classes
     "TaskManager",
+    "TaskLifecycleService",
+    "TaskRepository",
     "AsyncTaskProcessor",
     "CallbackHandler",
+    "WorkflowRegistry",
 ]
