@@ -45,11 +45,11 @@ class TaskLifecycleService:
 
     def _generate_script_id(self, script_code: str) -> str:
         # return "NP" + datetime.now().strftime("%y%m") + script_code
-        return "NP" + script_code
+        return "SN" + script_code
 
     def _generate_task_id(self, script_code: str) -> str:
         """生成任务ID"""
-        return "TSK" + script_code + str(random.randint(1000, 9999))
+        return "TSK" + script_code[:6] + datetime.now().strftime("%y%m%d%H%M") + str(random.randint(1000, 9999))
 
     # ==================== 序列化方法 ====================
     def _safe_serialize(self, value: Any) -> Any:
