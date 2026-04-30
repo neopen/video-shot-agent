@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Any
 
 from penshot.logger import info, warning, error
-from penshot.neopen.agent.workflow.workflow_states import WorkflowState
+from penshot.neopen.agent.workflow.workflow_state_types import WorkflowState
 from penshot.neopen.knowledge.memory.memory_manager import MemoryManager
 from penshot.neopen.knowledge.memory.memory_models import MemoryLevel
 from penshot.neopen.knowledge.llamaIndex.llama_index_knowledge import ScriptKnowledgeBase

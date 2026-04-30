@@ -13,7 +13,7 @@ from langgraph.graph import END
 from penshot.neopen.agent.human_decision.human_decision_converter import HumanDecisionConverter
 from penshot.neopen.agent.quality_auditor.quality_auditor_models import AuditStatus
 from penshot.neopen.agent.workflow.workflow_models import PipelineState, PipelineNode, AgentStage
-from penshot.neopen.agent.workflow.workflow_states import WorkflowState
+from penshot.neopen.agent.workflow.workflow_state_types import WorkflowState
 from penshot.logger import error, warning, info
 
 
@@ -60,10 +60,10 @@ class PipelineDecision:
         # 检查节点循环限制
         loop_decision, loop_reason = self._check_and_increment_node_loop(state, PipelineNode.PARSE_SCRIPT)
         if loop_decision != PipelineState.SUCCESS:
-            state.error_messages.append(f"剧本解析节点循环检查失败: {loop_reason}")
+            state.errors.error_messages.append(f"剧本解析节点循环检查失败: {loop_reason}")
             return loop_decision
 
-        parsed_script = state.parsed_script
+        parsed_script = state.domain.parsed_script
 
         # 检查解析结果是否存在
         if not parsed_script:
@@ -92,7 +92,7 @@ class PipelineDecision:
                 return PipelineState.NEEDS_HUMAN
 
         # 解析成功，重置该阶段的重试计数
-        state.stage_current_retries[PipelineNode.PARSE_SCRIPT] = 0
+        state.execution.stage_current_retries[PipelineNode.PARSE_SCRIPT] = 0
 
         # 解析成功，可以继续下一步
         return PipelineState.SUCCESS
@@ -120,20 +120,20 @@ class PipelineDecision:
         # 检查节点循环限制
         loop_decision, loop_reason = self._check_and_increment_node_loop(state, PipelineNode.SEGMENT_SHOT)
         if loop_decision != PipelineState.SUCCESS:
-            state.error_messages.append(f"镜头拆分节点循环检查失败: {loop_reason}")
+            state.errors.error_messages.append(f"镜头拆分节点循环检查失败: {loop_reason}")
             return loop_decision
 
         # 检查阶段重试限制
         can_retry, retry_reason = self._can_retry_stage(state, PipelineNode.SEGMENT_SHOT)
 
-        shot_sequence = state.shot_sequence
+        shot_sequence = state.domain.shot_sequence
 
         if not shot_sequence or len(shot_sequence.shots) < 1:
             error("镜头拆分，数据为空")
             return PipelineState.FAILED
 
         # 检查是否有过短镜头
-        short_shots = [s for s in shot_sequence.shots if s.duration < state.min_shot_duration]
+        short_shots = [s for s in shot_sequence.shots if s.duration < state.config.min_shot_duration]
         if short_shots:
             if can_retry:
                 # 增加重试计数
@@ -146,7 +146,7 @@ class PipelineDecision:
                 return PipelineState.NEEDS_REPAIR
 
         # 检查是否有过长镜头
-        long_shots = [s for s in shot_sequence.shots if s.duration > state.max_shot_duration]
+        long_shots = [s for s in shot_sequence.shots if s.duration > state.config.max_shot_duration]
         if long_shots:
             if can_retry:
                 # 增加重试计数
@@ -159,7 +159,7 @@ class PipelineDecision:
                 return PipelineState.NEEDS_REPAIR
 
         # 拆分成功，重置该阶段的重试计数（可选）
-        state.stage_current_retries[PipelineNode.SEGMENT_SHOT] = 0
+        state.execution.stage_current_retries[PipelineNode.SEGMENT_SHOT] = 0
 
         return PipelineState.SUCCESS
 
@@ -188,13 +188,13 @@ class PipelineDecision:
         # 检查节点循环限制
         loop_decision, loop_reason = self._check_and_increment_node_loop(state, PipelineNode.SPLIT_VIDEO)
         if loop_decision != PipelineState.SUCCESS:
-            state.error_messages.append(f"AI分段节点循环检查失败: {loop_reason}")
+            state.errors.error_messages.append(f"AI分段节点循环检查失败: {loop_reason}")
             return loop_decision
 
         # 检查阶段重试限制
         can_retry, retry_reason = self._can_retry_stage(state, PipelineNode.SPLIT_VIDEO)
 
-        fragment_sequence = state.fragment_sequence
+        fragment_sequence = state.domain.fragment_sequence
 
         # 检查分段结果是否存在
         if not fragment_sequence or len(fragment_sequence.fragments) < 1:
@@ -202,7 +202,7 @@ class PipelineDecision:
             return PipelineState.FAILED
 
         # 检查时长合规性：不能超过5.2秒
-        invalid_fragments = [f for f in fragment_sequence.fragments if f.duration > state.max_fragment_duration + 0.5]  # 允许一定的时长波动
+        invalid_fragments = [f for f in fragment_sequence.fragments if f.duration > state.config.max_fragment_duration + 0.5]  # 允许一定的时长波动
         if invalid_fragments:
             if len(invalid_fragments) <= 3:
                 # 少量问题，检查是否可以重试
@@ -219,14 +219,14 @@ class PipelineDecision:
                 return PipelineState.FAILED
 
         # 检查片段质量：不能过短（小于0.5秒）
-        short_fragments = [f for f in fragment_sequence.fragments if f.duration < state.min_fragment_duration]
+        short_fragments = [f for f in fragment_sequence.fragments if f.duration < state.config.min_fragment_duration]
         if short_fragments:
             # 有过短片段，需要修复
-            warning(f"发现{len(short_fragments)}个过短片段（<{state.min_fragment_duration}秒）")
+            warning(f"发现{len(short_fragments)}个过短片段（<{state.config.min_fragment_duration}秒）")
             return PipelineState.NEEDS_REPAIR
 
         # 成功，重置重试计数
-        state.stage_current_retries[PipelineNode.SPLIT_VIDEO] = 0
+        state.execution.stage_current_retries[PipelineNode.SPLIT_VIDEO] = 0
 
         # 分段成功，可以继续下一步
         return PipelineState.SUCCESS
@@ -256,13 +256,13 @@ class PipelineDecision:
         # 检查节点循环限制
         loop_decision, loop_reason = self._check_and_increment_node_loop(state, PipelineNode.CONVERT_PROMPT)
         if loop_decision != PipelineState.SUCCESS:
-            state.error_messages.append(f"提示词生成节点循环检查失败: {loop_reason}")
+            state.errors.error_messages.append(f"提示词生成节点循环检查失败: {loop_reason}")
             return loop_decision
 
         # 检查阶段重试限制
         can_retry, retry_reason = self._can_retry_stage(state, PipelineNode.CONVERT_PROMPT)
 
-        instructions = state.instructions
+        instructions = state.domain.instructions
 
         # 检查提示词结果是否存在
         if not instructions or len(instructions.fragments) < 1:
@@ -281,7 +281,7 @@ class PipelineDecision:
                 return PipelineState.NEEDS_REPAIR
 
         # 检查提示词长度是否过长（超过300字符）
-        long_prompts = [f for f in instructions.fragments if len(f.prompt) > state.max_prompt_length * 10]  # 允许一定的长度波动
+        long_prompts = [f for f in instructions.fragments if len(f.prompt) > state.config.max_prompt_length * 10]  # 允许一定的长度波动
         if long_prompts:
             if can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.CONVERT_PROMPT)
@@ -292,7 +292,7 @@ class PipelineDecision:
                 return PipelineState.NEEDS_REPAIR
 
         # 检查提示词长度是否过短
-        short_prompts = [f for f in instructions.fragments if len(f.prompt) < state.min_prompt_length]
+        short_prompts = [f for f in instructions.fragments if len(f.prompt) < state.config.min_prompt_length]
         if short_prompts:
             if can_retry:
                 state = self._increment_stage_retry(state, PipelineNode.CONVERT_PROMPT)
@@ -303,7 +303,7 @@ class PipelineDecision:
                 return PipelineState.NEEDS_REPAIR
 
         # 成功，重置重试计数
-        state.stage_current_retries[PipelineNode.CONVERT_PROMPT] = 0
+        state.execution.stage_current_retries[PipelineNode.CONVERT_PROMPT] = 0
 
         # 提示词可用，进入质量审查
         return PipelineState.VALID
@@ -332,20 +332,20 @@ class PipelineDecision:
             PipelineState: 决策结果
         """
         # 检查是否已经审查过且结果有效
-        if state.audit_executed and state.audit_report:
+        if state.domain.audit_executed and state.domain.audit_report:
             warning("检测到可能的重复质量审查调用，使用上次结果")
             return PipelineState.SUCCESS
 
         # 检查节点循环限制
         loop_decision, loop_reason = self._check_and_increment_node_loop(state, PipelineNode.AUDIT_QUALITY)
         if loop_decision != PipelineState.SUCCESS:
-            state.error_messages.append(f"质量审查节点循环检查失败: {loop_reason}")
+            state.errors.error_messages.append(f"质量审查节点循环检查失败: {loop_reason}")
             return loop_decision
 
         # 检查阶段重试限制
         can_retry, retry_reason = self._can_retry_stage(state, PipelineNode.AUDIT_QUALITY)
 
-        report = state.audit_report
+        report = state.domain.audit_report
 
         # 检查审计报告是否存在
         if not report:
@@ -361,7 +361,7 @@ class PipelineDecision:
         total_checks = report.stats.get("total_checks", 0)
         # 记录审计结果到状态
         if hasattr(state, 'audit_history'):
-            state.audit_history.append({
+            state.domain.audit_history.append({
                 "timestamp": datetime.now().isoformat(),
                 "status": report.status.value,
                 "score": report.score,
@@ -370,7 +370,7 @@ class PipelineDecision:
             })
 
         # 保存最后的审计结果
-        state.last_audit_result = {
+        state.domain.last_audit_result = {
             "status": report.status.value,
             "score": report.score,
             "passed_checks": passed_checks,
@@ -423,7 +423,7 @@ class PipelineDecision:
         # 如果决定重试，增加重试计数
         if decision == PipelineState.NEEDS_RETRY:
             state = self._increment_stage_retry(state, PipelineNode.AUDIT_QUALITY)
-            info(f"质量审查需要重试: 审计状态={report.status.value}, 已重试{state.stage_current_retries.get(PipelineNode.AUDIT_QUALITY, 0)}次")
+            info(f"质量审查需要重试: 审计状态={report.status.value}, 已重试{state.execution.stage_current_retries.get(PipelineNode.AUDIT_QUALITY, 0)}次")
 
         info(f"质量审查决策: 审计状态={report.status.value}, 决策={decision.value}, 分数={report.score}%")
 
@@ -460,7 +460,7 @@ class PipelineDecision:
         # 检查节点循环限制
         loop_decision, loop_reason = self._check_and_increment_node_loop(state, PipelineNode.CONTINUITY_CHECK)
         if loop_decision != PipelineState.SUCCESS:
-            state.error_messages.append(f"连续性检查节点循环检查失败: {loop_reason}")
+            state.errors.error_messages.append(f"连续性检查节点循环检查失败: {loop_reason}")
             return loop_decision
 
         # 使用统一的重试判断
@@ -471,7 +471,7 @@ class PipelineDecision:
 
         # 如果没有问题，成功
         if not issues:
-            state.stage_current_retries[PipelineNode.CONTINUITY_CHECK] = 0
+            state.execution.stage_current_retries[PipelineNode.CONTINUITY_CHECK] = 0
             return PipelineState.SUCCESS
 
         # 分类问题严重性
@@ -535,31 +535,31 @@ class PipelineDecision:
         # 检查节点循环限制
         loop_decision, loop_reason = self._check_and_increment_node_loop(state, PipelineNode.ERROR_HANDLER)
         if loop_decision != PipelineState.SUCCESS:
-            state.error_messages.append(f"错误处理节点循环检查失败: {loop_reason}")
+            state.errors.error_messages.append(f"错误处理节点循环检查失败: {loop_reason}")
             return loop_decision
 
         # 检查全局重试限制
-        if state.total_retries >= sum(state.stage_max_retries.values()):
-            warning(f"总重试次数已达上限: {state.total_retries}")
+        if state.execution.total_retries >= sum(state.execution.stage_max_retries.values()):
+            warning(f"总重试次数已达上限: {state.execution.total_retries}")
             return PipelineState.NEEDS_HUMAN
 
         # 检查是否有中止标志
-        if hasattr(state, 'recovery_flags') and state.recovery_flags.get('should_abort', False):
+        if hasattr(state, 'recovery_flags') and state.execution.recovery_flags.get('should_abort', False):
             info("检测到中止标志，结束流程")
             return PipelineState.ABORT
 
         # 检查是否需要人工干预
-        if state.needs_human_review:
+        if state.execution.needs_human_review:
             info("错误需要人工干预")
             return PipelineState.NEEDS_HUMAN
 
         # ========== 增强的延迟检查逻辑 ==========
         # 1. 检查延迟标志（从recovery_flags获取）
-        if hasattr(state, 'recovery_flags') and state.recovery_flags.get('need_delay', False):
-            delay_seconds = state.recovery_flags.get('delay_seconds', 5)
-            max_delay = state.recovery_flags.get('max_delay', 60)
-            delay_count = state.recovery_flags.get('delay_count', 0)
-            total_delay = state.recovery_flags.get('total_delay', 0)
+        if hasattr(state, 'recovery_flags') and state.execution.recovery_flags.get('need_delay', False):
+            delay_seconds = state.execution.recovery_flags.get('delay_seconds', 5)
+            max_delay = state.execution.recovery_flags.get('max_delay', 60)
+            delay_count = state.execution.recovery_flags.get('delay_count', 0)
+            total_delay = state.execution.recovery_flags.get('total_delay', 0)
 
             # 检查是否超过最大延迟时间
             if total_delay + delay_seconds > max_delay:
@@ -567,11 +567,11 @@ class PipelineDecision:
                 return PipelineState.NEEDS_HUMAN
 
             # 更新延迟计数
-            state.recovery_flags['delay_count'] = delay_count + 1
-            state.recovery_flags['total_delay'] = total_delay + delay_seconds
+            state.execution.recovery_flags['delay_count'] = delay_count + 1
+            state.execution.recovery_flags['total_delay'] = total_delay + delay_seconds
 
             # 检查延迟次数限制
-            max_delay_count = state.recovery_flags.get('max_delay_count', 3)
+            max_delay_count = state.execution.recovery_flags.get('max_delay_count', 3)
             if delay_count + 1 >= max_delay_count:
                 warning(f"延迟次数已达上限: {delay_count + 1}/{max_delay_count}")
                 return PipelineState.NEEDS_HUMAN
@@ -579,7 +579,7 @@ class PipelineDecision:
             # 动态调整延迟时间（指数退避）
             if delay_count > 0:
                 delay_seconds = min(delay_seconds * 2, max_delay - total_delay)
-                state.recovery_flags['delay_seconds'] = delay_seconds
+                state.execution.recovery_flags['delay_seconds'] = delay_seconds
 
             info(f"错误处理建议延迟 {delay_seconds} 秒后重试 (第{delay_count + 1}次延迟)")
 
@@ -591,7 +591,7 @@ class PipelineDecision:
             return PipelineState.NEEDS_RETRY
 
         # 2. 检查错误类型相关的延迟需求
-        error_messages = state.error_messages
+        error_messages = state.errors.error_messages
         if error_messages:
             last_error = error_messages[-1] if error_messages else ""
             error_lower = last_error.lower()
@@ -626,11 +626,11 @@ class PipelineDecision:
 
             if delay_needed:
                 if not hasattr(state, 'recovery_flags'):
-                    state.recovery_flags = {}
+                    state.execution.recovery_flags = {}
 
-                state.recovery_flags['need_delay'] = True
-                state.recovery_flags['delay_seconds'] = delay_seconds
-                state.recovery_flags['delay_reason'] = f"错误类型: {last_error[:100]}"
+                state.execution.recovery_flags['need_delay'] = True
+                state.execution.recovery_flags['delay_seconds'] = delay_seconds
+                state.execution.recovery_flags['delay_reason'] = f"错误类型: {last_error[:100]}"
 
                 # 使用同步延迟
                 import time
@@ -640,8 +640,8 @@ class PipelineDecision:
                 return PipelineState.NEEDS_RETRY
 
         # 检查修复标志
-        if hasattr(state, 'recovery_flags') and state.recovery_flags.get('need_repair', False):
-            repair_type = state.recovery_flags.get('repair_type', 'general')
+        if hasattr(state, 'recovery_flags') and state.execution.recovery_flags.get('need_repair', False):
+            repair_type = state.execution.recovery_flags.get('repair_type', 'general')
 
             if repair_type in ["validation", "data"]:
                 # 验证或数据错误，可能需要重新解析或调整
@@ -657,7 +657,7 @@ class PipelineDecision:
                 return PipelineState.VALID
 
         # 默认：如果可以恢复，重新开始流程
-        if hasattr(state, 'recovery_flags') and state.recovery_flags.get('can_recover', True):
+        if hasattr(state, 'recovery_flags') and state.execution.recovery_flags.get('can_recover', True):
             info("错误可恢复，重新开始流程")
             return PipelineState.NEEDS_RETRY
 
@@ -724,21 +724,21 @@ class PipelineDecision:
         # 检查节点循环限制
         loop_decision, loop_reason = self._check_and_increment_node_loop(state, PipelineNode.HUMAN_INTERVENTION)
         if loop_decision != PipelineState.SUCCESS:
-            state.error_messages.append(f"人工干预节点循环检查失败: {loop_reason}")
+            state.errors.error_messages.append(f"人工干预节点循环检查失败: {loop_reason}")
             return loop_decision
 
         # 从状态中获取人工输入
-        human_feedback = state.human_feedback or {}
+        human_feedback = state.execution.human_feedback or {}
         raw_input = human_feedback.get("decision", "CONTINUE")
         is_timeout = human_feedback.get("timeout", False)
 
         # 创建转换上下文
         context = {
             "task_id": state.task_id,
-            "current_stage": str(state.current_stage),
+            "current_stage": str(state.execution.current_stage),
             "is_timeout": is_timeout,
             "retry_count": state.retry_count,
-            "has_errors": len(state.error_messages) > 0 if state.error_messages else False,
+            "has_errors": len(state.errors.error_messages) > 0 if state.errors.error_messages else False,
         }
 
         info(f"开始决策处理，原始输入: {raw_input}")
@@ -780,19 +780,19 @@ class PipelineDecision:
             str: 返回节点名称（PipelineNode）或状态（PipelineState）
         """
         # 1. 检查全局循环是否超限
-        if graph_state.global_current_loops >= graph_state.global_max_loops:
-            graph_state.global_loop_exceeded = True
-            error(f"全局循环超限: {graph_state.global_current_loops}/{graph_state.global_max_loops}")
+        if graph_state.execution.global_current_loops >= graph_state.execution.global_max_loops:
+            graph_state.execution.global_loop_exceeded = True
+            error(f"全局循环超限: {graph_state.execution.global_current_loops}/{graph_state.execution.global_max_loops}")
             return PipelineState.FAILED  # 返回FAILED状态
 
         # 2. 检查当前节点循环是否超限
-        current_node = graph_state.current_node
+        current_node = graph_state.execution.current_node
         if current_node:
-            node_max_loops = graph_state.node_max_loops.get(current_node, 3)
-            node_current_loops = graph_state.node_current_loops.get(current_node, 0)
+            node_max_loops = graph_state.execution.node_max_loops.get(current_node, 3)
+            node_current_loops = graph_state.execution.node_current_loops.get(current_node, 0)
 
             if node_current_loops >= node_max_loops:
-                graph_state.node_loop_exceeded[current_node] = True
+                graph_state.execution.node_loop_exceeded[current_node] = True
                 warning(f"节点 {current_node.value} 循环超限: {node_current_loops}/{node_max_loops}")
 
                 # 根据节点类型决定处理方式
@@ -802,26 +802,26 @@ class PipelineDecision:
                     return PipelineState.FAILED
 
         # 3. 发出循环警告（如果需要）
-        if (graph_state.global_current_loops >= graph_state.global_max_loops * 0.8
-                and not graph_state.loop_warning_issued):
-            graph_state.loop_warning_issued = True
-            warning(f"循环警告: 已使用 {graph_state.global_current_loops}/{graph_state.global_max_loops} 次循环")
+        if (graph_state.execution.global_current_loops >= graph_state.execution.global_max_loops * 0.8
+                and not graph_state.execution.loop_warning_issued):
+            graph_state.execution.loop_warning_issued = True
+            warning(f"循环警告: 已使用 {graph_state.execution.global_current_loops}/{graph_state.execution.global_max_loops} 次循环")
 
         # 4. 根据当前阶段决定下一个节点
-        if graph_state.current_stage == AgentStage.SEGMENTER:
+        if graph_state.execution.current_stage == AgentStage.SEGMENTER:
             # 更新阶段为SPLITTER
-            graph_state.current_stage = AgentStage.SPLITTER
+            graph_state.execution.current_stage = AgentStage.SPLITTER
             return PipelineNode.SPLIT_VIDEO
-        elif graph_state.current_stage == AgentStage.SPLITTER:
+        elif graph_state.execution.current_stage == AgentStage.SPLITTER:
             # 更新阶段为CONVERTER
-            graph_state.current_stage = AgentStage.CONVERTER
+            graph_state.execution.current_stage = AgentStage.CONVERTER
             return PipelineNode.CONVERT_PROMPT
-        elif graph_state.current_stage == AgentStage.CONVERTER:
+        elif graph_state.execution.current_stage == AgentStage.CONVERTER:
             # 更新阶段为AUDITOR
-            graph_state.current_stage = AgentStage.AUDITOR
+            graph_state.execution.current_stage = AgentStage.AUDITOR
             return PipelineNode.AUDIT_QUALITY
         else:
-            warning(f"未知阶段: {graph_state.current_stage}")
+            warning(f"未知阶段: {graph_state.execution.current_stage}")
             return PipelineState.NEEDS_HUMAN
 
     # ===================================== 私有辅助方法 =====================================
@@ -860,16 +860,16 @@ class PipelineDecision:
             Tuple[bool, str]: (是否可以重试, 原因说明)
         """
         # 获取该阶段的最大重试次数
-        max_retries = state.stage_max_retries.get(stage_node, 2)  # 默认2次
+        max_retries = state.execution.stage_max_retries.get(stage_node, 2)  # 默认2次
 
         # 获取当前重试次数
-        current_retries = state.stage_current_retries.get(stage_node, 0)
+        current_retries = state.execution.stage_current_retries.get(stage_node, 0)
 
         if current_retries >= max_retries:
             return False, f"阶段 '{stage_node}' 重试次数已达上限 ({current_retries}/{max_retries})"
 
         # 检查循环限制
-        if state.global_loop_exceeded:
+        if state.execution.global_loop_exceeded:
             return False, "工作流循环次数已超限"
 
         # 可以重试
@@ -878,11 +878,11 @@ class PipelineDecision:
     def _increment_stage_retry(self, state: WorkflowState, stage_node: PipelineNode) -> WorkflowState:
         """增加指定阶段的重试计数"""
         # 更新阶段重试计数
-        current = state.stage_current_retries.get(stage_node, 0)
-        state.stage_current_retries[stage_node] = current + 1
+        current = state.execution.stage_current_retries.get(stage_node, 0)
+        state.execution.stage_current_retries[stage_node] = current + 1
 
         # 更新全局重试统计
-        state.total_retries += 1
+        state.execution.total_retries += 1
 
         return state
 
@@ -897,14 +897,14 @@ class PipelineDecision:
             Tuple[bool, str]: (是否超限, 原因说明)
         """
         # 检查节点循环限制
-        if state.node_loop_exceeded.get(stage_node, False):
-            max_loops = state.node_max_loops.get(stage_node, 3)
-            current_loops = state.node_current_loops.get(stage_node, 0)
+        if state.execution.node_loop_exceeded.get(stage_node, False):
+            max_loops = state.execution.node_max_loops.get(stage_node, 3)
+            current_loops = state.execution.node_current_loops.get(stage_node, 0)
             return True, f"节点 '{stage_node}' 循环次数超限 ({current_loops}/{max_loops})"
 
         # 检查全局循环限制
-        if state.global_loop_exceeded:
-            return True, f"全局循环次数超限 ({state.global_current_loops}/{state.global_max_loops})"
+        if state.execution.global_loop_exceeded:
+            return True, f"全局循环次数超限 ({state.execution.global_current_loops}/{state.execution.global_max_loops})"
 
         return False, "循环检查通过"
 
@@ -919,17 +919,17 @@ class PipelineDecision:
             Tuple[PipelineState, str]: (决策状态, 原因说明)
         """
         # 1. 更新节点循环计数
-        current_loops = state.node_current_loops.get(stage_node, 0)
-        state.node_current_loops[stage_node] = current_loops + 1
+        current_loops = state.execution.node_current_loops.get(stage_node, 0)
+        state.execution.node_current_loops[stage_node] = current_loops + 1
 
         # 2. 更新全局循环计数
         if hasattr(state, 'global_current_loops'):
-            state.global_current_loops += 1
+            state.execution.global_current_loops += 1
 
         # 3. 检查节点循环是否超限
-        max_loops = state.node_max_loops.get(stage_node, 3)
+        max_loops = state.execution.node_max_loops.get(stage_node, 3)
         if current_loops + 1 >= max_loops:
-            state.node_loop_exceeded[stage_node] = True
+            state.execution.node_loop_exceeded[stage_node] = True
 
             # 根据不同节点类型决定处理方式
             if stage_node in [PipelineNode.SEGMENT_SHOT, PipelineNode.SPLIT_VIDEO]:
@@ -941,9 +941,9 @@ class PipelineDecision:
 
         # 4. 检查全局循环是否超限
         if hasattr(state, 'global_current_loops') and hasattr(state, 'global_max_loops'):
-            if state.global_current_loops >= state.global_max_loops:
-                state.global_loop_exceeded = True
-                return PipelineState.FAILED, f"全局循环超限: {state.global_current_loops}/{state.global_max_loops}"
+            if state.execution.global_current_loops >= state.execution.global_max_loops:
+                state.execution.global_loop_exceeded = True
+                return PipelineState.FAILED, f"全局循环超限: {state.execution.global_current_loops}/{state.execution.global_max_loops}"
 
         return PipelineState.SUCCESS, f"节点 {stage_node.value} 循环正常 ({current_loops + 1}/{max_loops})"
 

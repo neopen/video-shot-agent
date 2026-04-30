@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List
 
 from penshot.logger import info, warning, error, debug
 from penshot.neopen.agent.video_splitter.video_splitter_models import FragmentSequence
-from penshot.neopen.agent.workflow.workflow_states import WorkflowState
+from penshot.neopen.agent.workflow.workflow_state_types import WorkflowState
 from penshot.utils.log_utils import print_log_exception
 from penshot.utils.obj_utils import convert_data_dict_safe
 
@@ -38,7 +38,7 @@ class WorkflowOutputFixer:
 
         try:
             # 1. 执行原始workflow（支持异步）
-            debug(f"执行原始workflow，任务ID: {initial_state.task_id}")
+            debug(f"执行原始workflow，任务ID: {initial_state.input.task_id}")
 
             # 注意：这里需要await workflow.ainvoke
             final_state = await workflow.ainvoke(
@@ -51,9 +51,9 @@ class WorkflowOutputFixer:
             fixed_output = self._analyze_and_fix_output(final_state, initial_state)
 
             # 3. 记录修复历史
-            self._record_fix_history(initial_state.task_id, fixed_output)
+            self._record_fix_history(initial_state.input.task_id, fixed_output)
 
-            info(f"workflow输出修复完成，任务ID: {initial_state.task_id}")
+            info(f"workflow输出修复完成，任务ID: {initial_state.input.task_id}")
             return fixed_output
 
         except Exception as e:

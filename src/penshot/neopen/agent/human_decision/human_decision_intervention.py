@@ -12,7 +12,7 @@ from typing import Optional
 
 from penshot.logger import info, warning, error
 from penshot.neopen.agent.human_decision.human_decision_converter import HumanDecisionConverter
-from penshot.neopen.agent.workflow.workflow_states import WorkflowState
+from penshot.neopen.agent.workflow.workflow_state_types import WorkflowState
 
 
 @dataclass
@@ -166,7 +166,7 @@ class HumanIntervention:
         result = self.input_handler.get_input_with_timeout()
 
         # 更新状态
-        graph_state.human_feedback = {
+        graph_state.execution.human_feedback = {
             "decision": result.decision,
             "timeout": result.timeout,
             "auto_decision": result.auto_decision,
@@ -184,24 +184,24 @@ class HumanIntervention:
         print("\n当前状态:")
         print("-" * 40)
 
-        print(f"任务ID: {state.task_id}")
-        print(f"当前阶段: {state.current_stage}")
+        print(f"任务ID: {state.input.task_id}")
+        print(f"当前阶段: {state.execution.current_stage}")
 
-        if state.error_messages:
-            print(f"错误: {len(state.error_messages)}个")
-            for i, err in enumerate(state.error_messages[-2:], 1):
+        if state.errors.error_messages:
+            print(f"错误: {len(state.errors.error_messages)}个")
+            for i, err in enumerate(state.errors.error_messages[-2:], 1):
                 truncated = err[:60] + "..." if len(err) > 60 else err
                 print(f"     {i}. {truncated}")
 
-        if state.retry_count > 0:
-            print(f"重试: {state.retry_count}/{state.max_retries}")
+        if state.execution.total_retries > 0:
+            print(f"重试: {state.execution.total_retries}/{state.execution.global_max_loops}")
 
-        if state.audit_report:
-            status = state.audit_report.status.value
+        if state.domain.audit_report:
+            status = state.domain.audit_report.status.value
             print(f"质量: {status}")
 
-        if state.continuity_issues:
-            print(f"连续性: {len(state.continuity_issues)}个问题")
+        if state.domain.continuity_issues:
+            print(f"连续性: {len(state.domain.continuity_issues)}个问题")
 
         print("-" * 40)
 

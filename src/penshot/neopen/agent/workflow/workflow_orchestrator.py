@@ -12,7 +12,7 @@ from langgraph.graph import StateGraph, END
 
 from penshot.logger import info, error, warning, debug
 from penshot.neopen.agent.workflow.workflow_models import PipelineNode, PipelineState
-from penshot.neopen.agent.workflow.workflow_states import WorkflowState
+from penshot.neopen.agent.workflow.workflow_state_types import WorkflowState
 
 
 class WorkflowOrchestrator:
@@ -90,6 +90,18 @@ class WorkflowOrchestrator:
         # 添加条件边
         for source, condition, mapping in self.conditional_edges:
             self.graph.add_conditional_edges(source, condition, mapping)
+
+        # 设置入口点：默认使用 PARSE_SCRIPT 作为起始节点
+        if PipelineNode.PARSE_SCRIPT.value in self.nodes:
+            self.graph.set_entry_point(PipelineNode.PARSE_SCRIPT.value)
+            debug(f"设置入口点: {PipelineNode.PARSE_SCRIPT.value}")
+        elif self.nodes:
+            # 如果没有 PARSE_SCRIPT 节点，使用第一个添加的节点作为入口点
+            first_node = next(iter(self.nodes.keys()))
+            self.graph.set_entry_point(first_node)
+            debug(f"设置入口点: {first_node} (默认第一个节点)")
+        else:
+            warning("没有找到任何节点，无法设置入口点")
 
         info(f"工作流图构建完成，节点数: {len(self.nodes)}，边数: {len(self.edges) + len(self.conditional_edges)}")
 

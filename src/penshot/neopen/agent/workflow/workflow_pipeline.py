@@ -19,7 +19,7 @@ from .workflow_models import AgentStage, PipelineNode, PipelineState
 from .workflow_nodes import WorkflowNodes
 from .workflow_output_fixer import WorkflowOutputFixer
 from .workflow_orchestrator import WorkflowOrchestrator
-from .workflow_states import WorkflowState
+from .workflow_state_types import WorkflowState, InputState, ConfigState
 from ..prompt_converter_agent import PromptConverterAgent
 from ..quality_auditor_agent import QualityAuditorAgent
 from ..shot_segmenter_agent import ShotSegmenterAgent
@@ -268,26 +268,30 @@ class MultiAgentPipeline:
         total_node_max_loops = config.max_total_loops
         default_global_max_loops = total_node_max_loops * 2  # 2倍安全系数
 
+        # 使用新的状态结构（组合方式）
         initial_state = WorkflowState(
-            raw_script=raw_script,
-            user_config=config or {},
-            task_id=self.task_id,
-            script_id=self.script_id,
-            current_stage=AgentStage.INIT,
-            # 镜头及片段参数
-            max_shot_duration=config.max_shot_duration,
-            min_shot_duration=config.min_shot_duration,
-            max_fragment_duration=config.max_fragment_duration,
-            min_fragment_duration=config.min_fragment_duration,
-            max_prompt_length=config.max_prompt_length,
-            min_prompt_length=config.min_prompt_length,
-            # 全局循环控制
-            global_max_loops=getattr(config, 'global_max_loops', default_global_max_loops),
-            global_loop_exceeded=config.global_loop_exceeded,
-            # 其他
-            loop_warning_issued=config.loop_warning_issued,
-            current_node=PipelineNode.PARSE_SCRIPT,
+            input=InputState(
+                raw_script=raw_script,
+                user_config=config,
+                task_id=self.task_id,
+                script_id=self.script_id,
+            ),
+            config=ConfigState(
+                max_shot_duration=config.max_shot_duration,
+                min_shot_duration=config.min_shot_duration,
+                max_fragment_duration=config.max_fragment_duration,
+                min_fragment_duration=config.min_fragment_duration,
+                max_prompt_length=config.max_prompt_length,
+                min_prompt_length=config.min_prompt_length,
+            ),
         )
+        
+        # 设置执行状态
+        initial_state.execution.current_stage = AgentStage.INIT
+        initial_state.execution.current_node = PipelineNode.PARSE_SCRIPT
+        initial_state.execution.global_max_loops = getattr(config, 'global_max_loops', default_global_max_loops)
+        initial_state.execution.global_loop_exceeded = config.global_loop_exceeded
+        initial_state.execution.loop_warning_issued = config.loop_warning_issued
 
         try:
             # 执行工作流
@@ -425,7 +429,7 @@ class MultiAgentPipeline:
                     self.workflow,
                     initial_state
                 ),
-                timeout=initial_state.timeout
+                timeout=initial_state.input.timeout
             )
 
             if not self._validate_fixed_result(final_result):
@@ -545,7 +549,7 @@ class MultiAgentPipeline:
                 if current_stage == 'completed' or current_node == 'generate_output':
                     success = True
                     data = {
-                        "task_id": state_dict.get('task_id', initial_state.task_id),
+                        "task_id": state_dict.get('task_id', initial_state.input.task_id),
                         "instructions": state_dict.get('instructions'),
                         "fragment_sequence": state_dict.get('fragment_sequence'),
                         "audit_report": state_dict.get('audit_report'),
@@ -559,7 +563,7 @@ class MultiAgentPipeline:
                 "data": data,
                 "errors": state_dict.get('error_messages', []),
                 "processing_stats": processing_stats,
-                "task_id": initial_state.task_id,
+                "task_id": initial_state.input.task_id,
                 "workflow_status": "completed" if success else "failed"
             }
 
@@ -568,5 +572,5 @@ class MultiAgentPipeline:
             return {
                 "success": False,
                 "error": str(e),
-                "task_id": initial_state.task_id
+                "task_id": initial_state.input.task_id
             }

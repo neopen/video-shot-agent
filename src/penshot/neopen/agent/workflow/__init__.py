@@ -7,18 +7,58 @@
 """
 
 from .workflow_models import AgentStage, PipelineNode, PipelineState
-from .workflow_states import WorkflowState
+from .workflow_states import WorkflowState as LegacyWorkflowState
+from .workflow_state_types import (
+    WorkflowState,
+    InputState,
+    DomainState,
+    ExecutionState,
+    ErrorState,
+    ConfigState,
+    OutputState,
+)
 from .workflow_nodes import WorkflowNodes
 from .workflow_decision import PipelineDecision
 from .workflow_orchestrator import WorkflowOrchestrator
 from .workflow_pipeline import MultiAgentPipeline
+from .workflow_error_handler import (
+    WorkflowErrorHandler,
+    ErrorHandlerMiddleware,
+    WorkflowError,
+    NetworkError,
+    ValidationError,
+    ConfigError,
+    BusinessError,
+    ErrorType,
+    ErrorSeverity,
+    ErrorAction,
+)
 
 __all__ = [
     # Models
     "AgentStage",
     "PipelineNode",
     "PipelineState",
+    # State types
     "WorkflowState",
+    "LegacyWorkflowState",
+    "InputState",
+    "DomainState",
+    "ExecutionState",
+    "ErrorState",
+    "ConfigState",
+    "OutputState",
+    # Error handling
+    "WorkflowErrorHandler",
+    "ErrorHandlerMiddleware",
+    "WorkflowError",
+    "NetworkError",
+    "ValidationError",
+    "ConfigError",
+    "BusinessError",
+    "ErrorType",
+    "ErrorSeverity",
+    "ErrorAction",
     # Runtime classes
     "WorkflowNodes",
     "PipelineDecision",

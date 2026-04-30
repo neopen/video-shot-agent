@@ -155,28 +155,29 @@ class TestWorkflowOrchestratorIntegration:
     def test_simple_workflow_execution(self, orchestrator):
         """测试简单工作流执行"""
         from langgraph.graph import END
+        from typing import Dict, Any
 
         # 定义节点函数
-        def start_node(state):
+        def start_node(state: Dict[str, Any]) -> Dict[str, Any]:
             state["step"] = "start"
             return state
 
-        def middle_node(state):
+        def middle_node(state: Dict[str, Any]) -> Dict[str, Any]:
             state["step"] = "middle"
             return state
 
-        def end_node(state):
+        def end_node(state: Dict[str, Any]) -> Dict[str, Any]:
             state["step"] = "end"
             return state
 
-        # 构建工作流
+        # 构建工作流，使用字典作为状态模式
         orchestrator.add_node("start", start_node)
         orchestrator.add_node("middle", middle_node)
         orchestrator.add_node("end", end_node)
         orchestrator.add_edge("start", "middle")
         orchestrator.add_edge("middle", "end")
         orchestrator.add_edge("end", END)
-        orchestrator.build()
+        orchestrator.build(state_schema=Dict[str, Any])
 
         # 执行工作流
         input_state = {"initial": "data"}
@@ -188,24 +189,25 @@ class TestWorkflowOrchestratorIntegration:
     def test_conditional_edge_workflow(self, orchestrator):
         """测试条件边工作流"""
         from langgraph.graph import END
+        from typing import Dict, Any
 
         # 定义节点函数
-        def check_node(state):
+        def check_node(state: Dict[str, Any]) -> Dict[str, Any]:
             return state
 
-        def success_node(state):
+        def success_node(state: Dict[str, Any]) -> Dict[str, Any]:
             state["result"] = "success"
             return state
 
-        def failure_node(state):
+        def failure_node(state: Dict[str, Any]) -> Dict[str, Any]:
             state["result"] = "failure"
             return state
 
         # 定义条件函数
-        def check_condition(state):
+        def check_condition(state: Dict[str, Any]) -> bool:
             return state.get("value", 0) > 5
 
-        # 构建工作流
+        # 构建工作流，使用字典作为状态模式
         orchestrator.add_node("check", check_node)
         orchestrator.add_node("success", success_node)
         orchestrator.add_node("failure", failure_node)
@@ -216,7 +218,7 @@ class TestWorkflowOrchestratorIntegration:
         )
         orchestrator.add_edge("success", END)
         orchestrator.add_edge("failure", END)
-        orchestrator.build()
+        orchestrator.build(state_schema=Dict[str, Any])
 
         # 测试成功路径
         result1 = orchestrator.run({"value": 10})
