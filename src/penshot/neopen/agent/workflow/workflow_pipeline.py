@@ -141,6 +141,7 @@ class MultiAgentPipeline:
             lambda graph_state: self.decision_funcs.decide_after_parsing(graph_state),
             {
                 PipelineState.SUCCESS: PipelineNode.SEGMENT_SHOT.value,
+                PipelineState.NEEDS_RETRY: PipelineNode.PARSE_SCRIPT.value,
                 PipelineState.NEEDS_HUMAN: PipelineNode.HUMAN_INTERVENTION.value,
                 PipelineState.FAILED: PipelineNode.ERROR_HANDLER.value
             }

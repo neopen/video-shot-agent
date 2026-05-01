@@ -1318,7 +1318,7 @@ class WorkflowNodes:
         })
 
         # 更新节点追踪
-        graph_state.last_node = current_node
+        graph_state.execution.last_node = current_node
 
         return graph_state
 

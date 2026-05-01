@@ -91,6 +91,19 @@ class PipelineDecision:
                 error(f"剧本解析数据无效，且{retry_reason}，需要人工干预")
                 return PipelineState.NEEDS_HUMAN
 
+        # 检查场景数量
+        if not parsed_script.scenes or len(parsed_script.scenes) < 1:
+            error("剧本解析，没有找到任何场景")
+            # 检查是否还有重试机会
+            can_retry, retry_reason = self._can_retry_stage(state, PipelineNode.PARSE_SCRIPT)
+            if can_retry:
+                state = self._increment_stage_retry(state, PipelineNode.PARSE_SCRIPT)
+                warning(f"剧本解析没有找到场景，{retry_reason}，准备重试")
+                return PipelineState.NEEDS_RETRY
+            else:
+                error(f"剧本解析没有找到场景，且{retry_reason}，需要人工干预")
+                return PipelineState.NEEDS_HUMAN
+
         # 解析成功，重置该阶段的重试计数
         state.execution.stage_current_retries[PipelineNode.PARSE_SCRIPT] = 0
 
@@ -827,7 +840,7 @@ class PipelineDecision:
     # ===================================== 私有辅助方法 =====================================
     def _get_retry_node_based_on_error_source(self, graph_state: WorkflowState, decision_type: PipelineState) -> PipelineNode:
         """根据错误来源获取重试节点"""
-        last_node = graph_state.last_node
+        last_node = graph_state.execution.last_node
 
         info(f"错误处理重试决策: type={decision_type.value}, last_node={last_node.value if last_node else None}")
 
