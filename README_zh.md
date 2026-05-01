@@ -1,10 +1,27 @@
-# 剧本分镜智能体 (PenShot)
+# 剧本分镜智能体 (PenShot)：剧本 → 分镜 → AI Prompt
 
 一个基于多智能体协作的剧本分镜系统，能够将多种格式的剧本（电影、短剧、小说等）拆分为符合 AI 文生视频时长的脚本单元，输出高质量分镜片段提示词描述，并保证叙事连续性。系统基于 LangChain + LangGraph 构建，通过 LLM 将任意格式剧本解析转换为符合主流模型的“Text to Video”提示词片段，支持任务池优先级排队、多层级记忆管理与 Chroma 向量检索。
 
-中文 | [English](./README.md) | [文档](https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5/) | [PyPI](https://pypi.org/project/penshot/) | [官网](https://shot.pengline.cn/)
+>  **一键转换**：任意格式剧本 → 镜头级分镜描述 → Sora/Veo/Runway/Kling 等模型就绪的 Prompt  
+> **连续性保障**：多级记忆 + 向量检索，确保角色/场景/剧情跨片段一致  
+> **5 分钟上手**：`pip install penshot` + 3 行代码集成
+
+中文 | [English](./README.md) | [文档](https://pengline.cn/2026/02/7e6cd67dd5ee45248f2276ac145555f5/) | [PyPI](https://pypi.org/project/penshot/) | [官网](https://shot.pengline.cn/)（在线演示） |  [详细集成指南](https://pengline.cn/2026/02/df16e7d36e5d41d2ad9d7934b28f94e4/) ·  [RAG 知识库](https://pengline.cn/2026/04/1e7f1f2a5a184427b4711cc7c1903027/) · [MCP 服务](https://pengline.cn/2026/02/b027d930c0b84ba6abd24bbef7d78afc/)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/) [![LangGraph](https://img.shields.io/badge/built_with-LangGraph-purple)](https://langchain-ai.github.io/langgraph/) [![PyPI](https://img.shields.io/pypi/v/penshot.svg)](https://pypi.org/project/penshot/) [![Downloads](https://static.pepy.tech/badge/penshot)](https://pepy.tech/project/penshot)
+
+
+
+---
+
+## 为什么选择 PenShot？
+
+| 痛点                          | PenShot 解决方案                                      |
+| ----------------------------- | ----------------------------------------------------- |
+| 剧本太长，AI 视频模型吃不下   | 智能分段 + 时长精准规划，输出模型友好型片段           |
+| 角色换装/场景跳变，视频不连贯 | 多级记忆池 + Chroma 向量检索，自动维持上下文一致性    |
+| 手动写 Prompt 费时费力        | 自动生成中英双语视觉描述 + 负面词 + 音频提示词        |
+| 多模型适配复杂                | 一套代码，支持 OpenAI/Qwen/DeepSeek/Ollama 等主流 LLM |
 
 
 
@@ -117,7 +134,6 @@ cp .env.example .env
 PENSHOT_LLM__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
 PENSHOT_LLM__DEFAULT__API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 PENSHOT_LLM__DEFAULT__MODEL_NAME=qwen-plus
-PENSHOT_LLM__DEFAULT__TIMEOUT=30
 
 ########################## 嵌入模型配置 #########################
 PENSHOT_EMBED__DEFAULT__BASE_URL=https://dashscope-intl.aliyuncs.com/api/v1
