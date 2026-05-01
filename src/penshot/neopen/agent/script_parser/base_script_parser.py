@@ -9,7 +9,7 @@ from abc import abstractmethod, ABC
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-from penshot.logger import info, warning, debug
+from penshot.logger import warning, debug, error
 from penshot.neopen.agent.base_models import ScriptType, ElementType
 from penshot.neopen.agent.quality_auditor.quality_auditor_models import QualityRepairParams
 from penshot.neopen.agent.script_parser.script_parser_models import ParsedScript, SceneInfo, CharacterInfo, BaseElement, \
@@ -67,7 +67,7 @@ class BaseScriptParser(ABC):
     def validate_parsed_result(self, parsed_script: ParsedScript) -> bool:
         """验证解析结果的基本有效性"""
         if not parsed_script.scenes:
-            warning("解析结果为空：没有找到任何场景")
+            error("解析结果为空：没有找到任何场景")
             return False
 
         # 检查元素顺序连续性

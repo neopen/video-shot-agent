@@ -44,7 +44,7 @@ class WorkflowOrchestrator:
             node: 节点执行函数
         """
         self.nodes[name] = node
-        info(f"注册节点: {name}")
+        debug(f"注册节点: {name}")
 
     def add_edge(self, source: str, target: str) -> None:
         """
