@@ -16,10 +16,10 @@ from penshot.neopen.agent.continuity_guardian.continuity_guardian_models import 
 from penshot.neopen.agent.continuity_guardian.continuity_repair_generator import ContinuityRepairGenerator
 from penshot.neopen.agent.human_decision.human_decision_intervention import HumanIntervention
 from penshot.neopen.agent.quality_auditor.quality_auditor_models import AuditStatus, QualityAuditReport, SeverityLevel, QualityRepairParams
+from penshot.neopen.agent.workflow.workflow_error_handler import WorkflowErrorHandler, ErrorHandlerMiddleware
 from penshot.neopen.agent.workflow.workflow_models import AgentStage, PipelineNode
 from penshot.neopen.agent.workflow.workflow_output import WorkflowOutputWriter
-from penshot.neopen.agent.workflow.workflow_state_types import WorkflowState, ExecutionState, DomainState, ErrorState
-from penshot.neopen.agent.workflow.workflow_error_handler import WorkflowErrorHandler, ErrorHandlerMiddleware
+from penshot.neopen.agent.workflow.workflow_state_types import WorkflowState
 from penshot.neopen.knowledge.memory.memory_manager import MemoryManager
 from penshot.neopen.knowledge.memory.memory_models import MemoryConfig, MemoryLevel
 from penshot.neopen.prompts.prompt_template_manager import PromptTemplateManager
@@ -91,14 +91,13 @@ class WorkflowNodes:
         # 连续性守护
         self.generator = ContinuityRepairGenerator()
         self.checker = ContinuityGuardianChecker()
-        
+
         # 初始化输出写入器
         self.output_writer = WorkflowOutputWriter(self.storage, self.memory)
-        
+
         # 初始化统一错误处理器
         self.error_handler = WorkflowErrorHandler()
         self.error_middleware = ErrorHandlerMiddleware(self.error_handler)
-
 
     def parse_script_node(self, state: WorkflowState) -> WorkflowState:
         """
@@ -881,7 +880,7 @@ class WorkflowNodes:
                             state.domain.parsed_script = self.script_parser.repair_result(
                                 state.domain.parsed_script,
                                 params.issues if hasattr(params, 'issues') else [],
-                                state.raw_script
+                                state.input.raw_script
                             )
                             repair_count += 1
                             info(f"剧本解析修复完成，执行了{len(params.issues) if hasattr(params, 'issues') else 0}个修复")
@@ -1188,7 +1187,7 @@ class WorkflowNodes:
             }
 
             # 设置最终输出
-            state.final_output = output_data
+            state.output.final_output = output_data
             # 更新阶段为 END
             state.execution.current_stage = AgentStage.END
             state.execution.current_node = PipelineNode.GENERATE_OUTPUT

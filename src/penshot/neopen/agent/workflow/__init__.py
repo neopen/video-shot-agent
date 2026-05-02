@@ -7,7 +7,6 @@
 """
 
 from .workflow_models import AgentStage, PipelineNode, PipelineState
-from .workflow_states import WorkflowState as LegacyWorkflowState
 from .workflow_state_types import (
     WorkflowState,
     InputState,
@@ -41,7 +40,6 @@ __all__ = [
     "PipelineState",
     # State types
     "WorkflowState",
-    "LegacyWorkflowState",
     "InputState",
     "DomainState",
     "ExecutionState",

@@ -747,10 +747,10 @@ class PipelineDecision:
 
         # 创建转换上下文
         context = {
-            "task_id": state.task_id,
+            "task_id": state.input.task_id,
             "current_stage": str(state.execution.current_stage),
             "is_timeout": is_timeout,
-            "retry_count": state.retry_count,
+            "retry_count": state.execution.total_retries,
             "has_errors": len(state.errors.error_messages) > 0 if state.errors.error_messages else False,
         }
 
