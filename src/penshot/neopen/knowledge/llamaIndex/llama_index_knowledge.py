@@ -562,12 +562,6 @@ class ScriptKnowledgeBase:
                     if os.path.getsize(vector_store_path) > 0:
                         self.vector_store = SimpleVectorStore.from_persist_path(vector_store_path)
                         
-                        # 验证向量存储是否包含文本数据
-                        # 检查存储是否为空（通过检查存储的文档数量）
-                        if hasattr(self.vector_store, 'store') and isinstance(self.vector_store.store, dict):
-                            if not self.vector_store.store:
-                                raise ValueError("Cannot initialize from a vector store that does not store text")
-                        
                         self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
                         self.index = VectorStoreIndex.from_vector_store(
                             self.vector_store,
@@ -577,14 +571,6 @@ class ScriptKnowledgeBase:
                         debug("已加载向量存储")
                     else:
                         debug(f"向量存储文件为空: {vector_store_path}")
-                except ValueError as ve:
-                    warning(f"加载向量存储失败（数据格式问题）: {ve}")
-                    # 删除损坏的文件，重新创建
-                    try:
-                        os.remove(vector_store_path)
-                        debug(f"已删除无效的向量存储文件: {vector_store_path}")
-                    except:
-                        pass
                 except Exception as e:
                     warning(f"加载向量存储失败（文件可能损坏）: {e}")
                     # 删除损坏的文件，重新创建
