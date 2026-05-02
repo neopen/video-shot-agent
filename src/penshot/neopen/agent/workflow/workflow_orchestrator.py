@@ -21,6 +21,8 @@ class WorkflowOrchestrator:
     def __init__(self):
         """初始化工作流编排器"""
         self.graph: Optional[StateGraph] = None
+        # 编译缓存
+        self._compiled_graph: Optional[Any] = None
         self.nodes: Dict[str, Callable] = {}
         self.edges: List[tuple] = []
         self.conditional_edges: List[tuple] = []
@@ -103,6 +105,7 @@ class WorkflowOrchestrator:
         else:
             warning("没有找到任何节点，无法设置入口点")
 
+        self._compiled_graph = self.graph.compile()
         info(f"工作流图构建完成，节点数: {len(self.nodes)}，边数: {len(self.edges) + len(self.conditional_edges)}")
 
     def run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -115,14 +118,11 @@ class WorkflowOrchestrator:
         Returns:
             输出结果
         """
-        if self.graph is None:
+        if self._compiled_graph is None:
             raise RuntimeError("工作流图尚未构建，请先调用 build() 方法")
 
-        compiled_graph = self.graph.compile()
-        info(f"工作流开始执行，输入: {input_data.get('script_id', 'unknown')}")
-
         try:
-            result = compiled_graph.invoke(input_data)
+            result = self._compiled_graph.invoke(input_data)
             info(f"工作流执行完成，状态: {result.get('status', 'unknown')}")
             return result
         except Exception as e:
@@ -139,14 +139,11 @@ class WorkflowOrchestrator:
         Returns:
             输出结果
         """
-        if self.graph is None:
+        if self._compiled_graph is None:
             raise RuntimeError("工作流图尚未构建，请先调用 build() 方法")
 
-        compiled_graph = self.graph.compile()
-        info(f"异步工作流开始执行，输入: {input_data.get('script_id', 'unknown')}")
-
         try:
-            result = await compiled_graph.ainvoke(input_data)
+            result = await self._compiled_graph.ainvoke(input_data)
             info(f"异步工作流执行完成，状态: {result.get('status', 'unknown')}")
             return result
         except Exception as e:
