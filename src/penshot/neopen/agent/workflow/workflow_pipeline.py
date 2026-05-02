@@ -15,6 +15,7 @@ from langgraph.graph import END
 from penshot.logger import debug, error, info, warning
 from penshot.neopen.agent.script_parser_agent import ScriptParserAgent
 from penshot.utils.log_utils import print_log_exception
+from penshot.utils.obj_utils import to_dict
 from .workflow_decision import PipelineDecision
 from .workflow_models import AgentStage, PipelineNode, PipelineState
 from .workflow_nodes import WorkflowNodes
@@ -567,16 +568,6 @@ class MultiAgentPipeline:
                 state_dict = raw_state.__dict__
             else:
                 return {"success": False, "error": "无法解析状态"}
-
-            # 辅助函数：将对象转换为字典
-            def to_dict(obj):
-                if isinstance(obj, dict):
-                    return obj
-                elif hasattr(obj, 'dict'):
-                    return obj.dict()
-                elif hasattr(obj, '__dict__'):
-                    return obj.__dict__
-                return {}
 
             # 从新状态结构中提取信息（处理嵌套对象）
             domain = to_dict(state_dict.get('domain'))

@@ -12,7 +12,7 @@ from penshot.logger import info, warning, error, debug
 from penshot.neopen.agent.video_splitter.video_splitter_models import FragmentSequence
 from penshot.neopen.agent.workflow.workflow_state_types import WorkflowState
 from penshot.utils.log_utils import print_log_exception
-from penshot.utils.obj_utils import convert_data_dict_safe
+from penshot.utils.obj_utils import convert_data_dict_safe, to_dict
 
 
 class WorkflowOutputFixer:
@@ -162,6 +162,43 @@ class WorkflowOutputFixer:
                             debug(f"从键 '{key}' 找到有效的片段序列")
                             return fragment_sequence
 
+            # 检查新状态结构中的domain子状态（处理对象或字典）
+            if 'domain' in state_dict:
+                domain = to_dict(state_dict['domain'])
+                debug(f"domain内容键: {list(domain.keys())}")
+                
+                # 特别检查fragment_sequence字段
+                if 'fragment_sequence' in domain:
+                    candidate = domain['fragment_sequence']
+                    debug(f"找到domain.fragment_sequence，类型: {type(candidate)}")
+                    
+                    if candidate is not None:
+                        # 检查是否是FragmentSequence对象
+                        if isinstance(candidate, FragmentSequence):
+                            debug(f"domain.fragment_sequence是FragmentSequence对象，片段数: {len(candidate.fragments)}")
+                            return candidate
+                        # 检查是否是字典
+                        elif isinstance(candidate, dict):
+                            debug(f"domain.fragment_sequence是字典，键: {list(candidate.keys())}")
+                            if 'fragments' in candidate:
+                                fragments = candidate['fragments']
+                                debug(f"fragments列表长度: {len(fragments) if isinstance(fragments, list) else '不是列表'}")
+                                if self._is_valid_fragment_sequence(candidate):
+                                    fragment_sequence = self._convert_to_fragment_sequence(candidate)
+                                    if fragment_sequence:
+                                        return fragment_sequence
+                
+                # 继续检查其他键
+                for key in search_keys:
+                    if key in domain and key != 'fragment_sequence':
+                        candidate = domain[key]
+                        debug(f"检查domain.{key}: {type(candidate)}")
+                        if self._is_valid_fragment_sequence(candidate):
+                            fragment_sequence = self._convert_to_fragment_sequence(candidate)
+                            if fragment_sequence:
+                                debug(f"从domain.{key}找到有效的片段序列")
+                                return fragment_sequence
+
             # 检查workflow状态中的其他数据
             if 'intermediate_results' in state_dict:
                 intermediate = state_dict['intermediate_results']
@@ -235,7 +272,7 @@ class WorkflowOutputFixer:
                 if 'fragments' in candidate:
                     fragments = candidate['fragments']
                     if isinstance(fragments, list) and len(fragments) > 0:
-                        # 检查片段结构
+                        # 检查片段结构（放宽验证）
                         first_fragment = fragments[0]
                         if isinstance(first_fragment, dict):
                             # 检查必要字段
@@ -301,6 +338,8 @@ class WorkflowOutputFixer:
             # 添加instructions（如果存在）
             if 'instructions' in state_dict:
                 inner_data["instructions"] = state_dict['instructions']
+            elif state_dict.get('domain') and hasattr(state_dict['domain'], 'instructions'):
+                inner_data["instructions"] = state_dict['domain'].instructions
 
             # 1. 添加修复后的fragment_sequence
             if self.is_debug:
@@ -453,27 +492,32 @@ class WorkflowOutputFixer:
                                  initial_state: WorkflowState) -> Dict[str, Any]:
         """将状态字典转换为结果格式"""
         try:
-            # 这是原始的转换逻辑，从你的代码中提取
             success = False
-            data = None
 
-            # 提取信息
-            data = state_dict.get('final_output')
+            # 从新状态结构中提取信息（处理嵌套对象）
+            domain = to_dict(state_dict.get('domain'))
+            output = to_dict(state_dict.get('output'))
+            execution = to_dict(state_dict.get('execution'))
+            errors = to_dict(state_dict.get('errors'))
+            input_data = to_dict(state_dict.get('input'))
+
+            # 提取最终输出
+            data = output.get('final_output')
 
             if data is not None:
                 success = True
             else:
                 # 检查是否到达结束状态
-                current_stage = state_dict.get('current_stage')
-                current_node = state_dict.get('current_node')
+                current_stage = execution.get('current_stage')
+                current_node = execution.get('current_node')
 
-                if current_stage == 'completed' or current_node == 'generate_output':
+                if current_stage == 'END' or (isinstance(current_stage, str) and current_stage.endswith('END')) or current_node == 'generate_output':
                     success = True
                     data = {
-                        "task_id": state_dict.get('task_id', getattr(initial_state, 'task_id', 'unknown')),
-                        "instructions": state_dict.get('instructions'),
-                        "fragment_sequence": state_dict.get('fragment_sequence'),
-                        "audit_report": state_dict.get('audit_report'),
+                        "task_id": input_data.get('task_id', initial_state.input.task_id),
+                        "instructions": domain.get('instructions'),
+                        "fragment_sequence": domain.get('fragment_sequence'),
+                        "audit_report": domain.get('audit_report'),
                         "status": "completed"
                     }
 
@@ -481,9 +525,9 @@ class WorkflowOutputFixer:
             result = {
                 "success": success,
                 "data": data,
-                "errors": state_dict.get('error_messages', []),
+                "errors": errors.get('error_messages', []),
                 "processing_stats": self._get_completed_stages(state_dict),
-                "task_id": getattr(initial_state, 'task_id', 'unknown'),
+                "task_id": initial_state.input.task_id,
                 "workflow_status": "completed" if success else "failed"
             }
 

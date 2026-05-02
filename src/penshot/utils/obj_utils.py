@@ -44,6 +44,16 @@ except ImportError:
 
 
 # ================================== obj 转 dict ==================================
+# 辅助函数：将对象转换为字典
+def to_dict(obj):
+    if isinstance(obj, dict):
+        return obj
+    elif hasattr(obj, 'dict'):
+        return obj.dict()
+    elif hasattr(obj, '__dict__'):
+        return obj.__dict__
+    return {}
+
 
 def obj_to_dict(
         obj: Any,
