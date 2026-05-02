@@ -10,7 +10,7 @@ import threading
 from datetime import datetime
 from typing import Dict, Optional, List, Any
 
-from penshot.logger import debug, error, info
+from penshot.logger import debug, error, info, warning
 from penshot.neopen.agent.workflow.workflow_models import PipelineNode
 from penshot.neopen.agent.workflow.workflow_state_types import WorkflowState
 from penshot.neopen.knowledge.memory.memory_manager import MemoryManager
@@ -40,36 +40,58 @@ class WorkflowOutputWriter:
         self.memory = memory
         self._background_loop: Optional[asyncio.AbstractEventLoop] = None
         self._background_thread: Optional[threading.Thread] = None
+        self._loop_ready = threading.Event()  # 使用事件通知循环就绪
         self._start_background_loop()
 
     def _start_background_loop(self):
         """启动后台事件循环"""
         def run_loop():
-            self._background_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._background_loop)
-            self._background_loop.run_forever()
+            # 创建新的事件循环
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self._background_loop = loop
+            self._loop_ready.set()  # 通知循环已就绪
 
+            try:
+                loop.run_forever()
+            except Exception as e:
+                error(f"后台事件循环异常退出: {e}")
+            finally:
+                loop.close()
+                self._background_loop = None
+
+        # 启动后台线程
         self._background_thread = threading.Thread(target=run_loop, daemon=True)
         self._background_thread.start()
 
-        # 等待循环启动
-        import time
+        # 等待循环启动完成（最多等待5秒）
         timeout = 5
-        start = time.time()
-        while self._background_loop is None and (time.time() - start) < timeout:
-            time.sleep(0.01)
+        if not self._loop_ready.wait(timeout):
+            warning(f"后台事件循环启动超时 ({timeout}秒)，部分异步操作可能失败")
+
+    def _is_loop_running(self) -> bool:
+        """检查后台循环是否正在运行"""
+        return (self._background_loop is not None and
+                self._background_loop.is_running())
 
     def _run_async(self, coro):
         """在后台事件循环中运行协程"""
-        if self._background_loop is None:
+        if not self._is_loop_running():
+            warning("后台事件循环未运行，降级为同步执行")
             # 降级：同步执行
             try:
                 loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
                 return loop.run_until_complete(coro)
             except Exception as e:
                 error(f"同步执行失败: {e}")
-                return
-        return asyncio.run_coroutine_threadsafe(coro, self._background_loop)
+                return None
+
+        try:
+            return asyncio.run_coroutine_threadsafe(coro, self._background_loop)
+        except RuntimeError as e:
+            error(f"提交异步任务失败: {e}")
+            return None
 
     def save_all_reports(self, state: WorkflowState):
         """
@@ -93,7 +115,13 @@ class WorkflowOutputWriter:
         ]
 
         # 并发执行所有保存任务
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 检查是否有失败的任务
+        failed_count = sum(1 for r in results if isinstance(r, Exception))
+        if failed_count > 0:
+            warning(f"有 {failed_count}/{len(tasks)} 个报告保存失败")
+
         debug(f"剧本 {state.input.script_id} 的任务 {state.input.task_id} 所有报告已保存")
 
     async def _save_execution_summary(self, state: WorkflowState):
@@ -381,8 +409,8 @@ class WorkflowOutputWriter:
                 "total_continuity_issues": len(continuity_history),
                 "issues_by_type": issues_by_type,
                 "issues_by_severity": issues_by_severity,
-                "continuity_retry_count": getattr(state, 'continuity_retry_count', 0),
-                "continuity_passed": getattr(state, 'continuity_passed', False),
+                "continuity_retry_count": state.domain.continuity_retry_count,
+                "continuity_passed": state.domain.continuity_passed,
                 "issues": continuity_history[-50:]  # 只保留最近50条
             }
 
@@ -435,10 +463,14 @@ class WorkflowOutputWriter:
 
     def shutdown(self):
         """关闭后台线程"""
-        if self._background_loop:
+        if self._background_loop and self._background_loop.is_running():
             self._background_loop.call_soon_threadsafe(self._background_loop.stop)
+
         if self._background_thread and self._background_thread.is_alive():
             self._background_thread.join(timeout=5)
+
+        self._background_loop = None
+        self._background_thread = None
         info("WorkflowOutputWriter 已关闭")
 
     # ============================= 辅助方法 =============================
