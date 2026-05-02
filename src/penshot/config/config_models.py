@@ -79,6 +79,16 @@ class EmbeddingConfig(BaseModel):
     fallback: EmbeddingBaseConfig = Field(default_factory=EmbeddingBaseConfig)
 
 
+class RetrieverConfig(BaseModel):
+    """检索器配置类"""
+    rerank_enabled: bool = Field(default=False)
+    rerank_model_name: str = Field(default="BAAI/bge-reranker-large")
+    rerank_model_local_path: str = Field(default="")
+
+    search_type: str = Field(default="similarity")
+    similarity_top_k: int = Field(default=5)
+
+
 class APIConfig(BaseModel):
     """API配置"""
     host: str = Field(default="127.0.0.1")
@@ -103,6 +113,7 @@ class AppConfig(BaseModel):
     description: str = Field(default="脚本转分镜AI助手")
     environment: Literal["development", "production"] = Field(default="development")
     language: Literal["zh", "en"] = Field(default="zh")
+    hf_endpoint: str = Field(default="https://huggingface.co")
 
 
 class StoryboardGenerationConfig(BaseModel):

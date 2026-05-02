@@ -13,7 +13,7 @@ from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, Settings
 
 from penshot.config.config_loader import ConfigLoader
 from penshot.config.config_models import (AppConfig, APIConfig, LLMConfig, EmbeddingConfig,
-                                          PathsConfig, StoryboardConfig, LLMBaseConfig, EmbeddingBaseConfig)
+                                          PathsConfig, StoryboardConfig, LLMBaseConfig, EmbeddingBaseConfig, RetrieverConfig)
 from penshot.utils.dotenv_loader import DotEnvLoader
 from penshot.utils.path_utils import PathResolver
 
@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     # AI 模型配置
     llm: LLMConfig = Field(default_factory=LLMConfig)
     embed: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    # 检索器配置
+    retriever: RetrieverConfig = Field(default_factory=RetrieverConfig)
 
     # 业务配置
     storyboard: StoryboardConfig = Field(default_factory=StoryboardConfig)
@@ -73,6 +75,10 @@ class Settings(BaseSettings):
             env_settings,  # 2. 中优先级
             init_settings,  # 3. 最高优先级
         )
+
+    def get_app_config(self) -> AppConfig:
+        """获取应用配置"""
+        return self.app
 
     def get_llm_config(self, provider: str = "default") -> LLMBaseConfig:
         """获取LLM配置（安全返回，不暴露 SecretStr 原始值）"""
@@ -129,9 +135,14 @@ class Settings(BaseSettings):
 
         return data_paths
 
+    def get_retriever_config(self) -> RetrieverConfig:
+        return self.retriever
+
 
 # ==================== 全局配置实例 ====================
 settings = Settings()
+app_config = settings.get_app_config()
+os.environ["HF_ENDPOINT"] = app_config.hf_endpoint
 
 # ==================== 调试辅助 ====================
 
