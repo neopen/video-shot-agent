@@ -112,7 +112,23 @@ class ConsoleInputHandler:
     def _input_thread(self):
         """输入采集线程"""
         try:
-            raw_input = input().strip()
+            # 使用 sys.stdin.readline() 替代 input()，并处理编码问题
+            import sys
+            try:
+                # 尝试读取输入
+                line = sys.stdin.readline()
+                if line:
+                    # 处理可能的编码问题
+                    if isinstance(line, bytes):
+                        raw_input = line.decode('utf-8', errors='replace').strip()
+                    else:
+                        raw_input = line.strip()
+                else:
+                    raw_input = ""
+            except (UnicodeDecodeError, OSError) as e:
+                # 处理编码错误或输入流关闭的情况
+                warning(f"输入编码错误: {str(e)}")
+                raw_input = ""
 
             with self._lock:
                 if raw_input.isdigit():
