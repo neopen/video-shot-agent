@@ -6,6 +6,7 @@
 @Time: 2025/10 - 至今
 """
 import asyncio
+import time
 from typing import Dict, Any
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -289,7 +290,10 @@ class MultiAgentPipeline:
         
         # 设置执行状态
         initial_state.execution.current_stage = AgentStage.INIT
-        initial_state.execution.current_node = PipelineNode.PARSE_SCRIPT
+        # initial_state.execution.current_node = PipelineNode.PARSE_SCRIPT
+        initial_state.execution.workflow_start_time = time.time()
+
+        # 全局循环限制
         initial_state.execution.global_max_loops = getattr(config, 'global_max_loops', default_global_max_loops)
         initial_state.execution.global_loop_exceeded = config.global_loop_exceeded
         initial_state.execution.loop_warning_issued = config.loop_warning_issued
@@ -471,7 +475,14 @@ class MultiAgentPipeline:
                 warning("结果中没有 instructions")
                 return False
 
-            fragments = instructions.fragments
+            # 处理instructions可能是字典或对象的情况
+            if isinstance(instructions, dict):
+                fragments = instructions.get("fragments", [])
+                metadata = instructions.get("metadata", {})
+            else:
+                fragments = getattr(instructions, 'fragments', [])
+                metadata = getattr(instructions, 'metadata', {})
+
             if not isinstance(fragments, list):
                 warning(f"fragments不是列表: {type(fragments)}")
                 return False
@@ -480,20 +491,39 @@ class MultiAgentPipeline:
                 warning("fragments列表为空")
                 return False
 
-            metadata = instructions.metadata
             if metadata.get("fixed_by_output_fixer"):
                 debug("结果已被修复器修复")
 
-            fragment_ids = [f.fragment_id for f in fragments]
+            # 处理片段可能是字典或对象的情况
+            fragment_ids = []
+            for f in fragments:
+                if isinstance(f, dict):
+                    fragment_ids.append(f.get("fragment_id", f.get("id", "")))
+                else:
+                    fragment_ids.append(getattr(f, 'fragment_id', getattr(f, 'id', "")))
+            
             unique_ids = set(fragment_ids)
             if len(fragment_ids) != len(unique_ids):
                 warning(f"片段ID不唯一: {len(fragment_ids)}个片段, {len(unique_ids)}个唯一ID")
 
-            fragments_with_prompts = [f for f in fragments if f.prompt]
+            # 处理片段可能是字典或对象的情况
+            fragments_with_prompts = []
+            fragments_with_audio_prompts = []
+            for f in fragments:
+                if isinstance(f, dict):
+                    if f.get("prompt"):
+                        fragments_with_prompts.append(f)
+                    if f.get("audio_prompt"):
+                        fragments_with_audio_prompts.append(f)
+                else:
+                    if getattr(f, 'prompt', None):
+                        fragments_with_prompts.append(f)
+                    if getattr(f, 'audio_prompt', None):
+                        fragments_with_audio_prompts.append(f)
+            
             if len(fragments_with_prompts) < len(fragments) * 0.8:
                 warning(f"片段中提示词缺失较多: {len(fragments_with_prompts)}/{len(fragments)}个片段有提示词")
 
-            fragments_with_audio_prompts = [f for f in fragments if f.audio_prompt]
             if len(fragments_with_audio_prompts) < len(fragments) * 0.5:
                 warning(f"片段中音频提示词缺失较多: {len(fragments_with_audio_prompts)}/{len(fragments)}个片段有音频提示词")
 
@@ -538,22 +568,39 @@ class MultiAgentPipeline:
             else:
                 return {"success": False, "error": "无法解析状态"}
 
+            # 辅助函数：将对象转换为字典
+            def to_dict(obj):
+                if isinstance(obj, dict):
+                    return obj
+                elif hasattr(obj, 'dict'):
+                    return obj.dict()
+                elif hasattr(obj, '__dict__'):
+                    return obj.__dict__
+                return {}
+
+            # 从新状态结构中提取信息（处理嵌套对象）
+            domain = to_dict(state_dict.get('domain'))
+            output = to_dict(state_dict.get('output'))
+            execution = to_dict(state_dict.get('execution'))
+            errors = to_dict(state_dict.get('errors'))
+            input_data = to_dict(state_dict.get('input'))
+
             success = False
-            data = state_dict.get('final_output')
+            data = output.get('final_output')
 
             if data is not None:
                 success = True
             else:
-                current_stage = state_dict.get('current_stage')
-                current_node = state_dict.get('current_node')
+                current_stage = execution.get('current_stage')
+                current_node = execution.get('current_node')
 
-                if current_stage == 'completed' or current_node == 'generate_output':
+                if current_stage == 'END' or (isinstance(current_stage, str) and current_stage.endswith('END')) or current_node == 'generate_output':
                     success = True
                     data = {
-                        "task_id": state_dict.get('task_id', initial_state.input.task_id),
-                        "instructions": state_dict.get('instructions'),
-                        "fragment_sequence": state_dict.get('fragment_sequence'),
-                        "audit_report": state_dict.get('audit_report'),
+                        "task_id": input_data.get('task_id', initial_state.input.task_id),
+                        "instructions": domain.get('instructions'),
+                        "fragment_sequence": domain.get('fragment_sequence'),
+                        "audit_report": domain.get('audit_report'),
                         "status": "completed"
                     }
 
@@ -562,7 +609,7 @@ class MultiAgentPipeline:
             return {
                 "success": success,
                 "data": data,
-                "errors": state_dict.get('error_messages', []),
+                "errors": errors.get('error_messages', []),
                 "processing_stats": processing_stats,
                 "task_id": initial_state.input.task_id,
                 "workflow_status": "completed" if success else "failed"
@@ -575,3 +622,18 @@ class MultiAgentPipeline:
                 "error": str(e),
                 "task_id": initial_state.input.task_id
             }
+
+    def health_check(self) -> Dict[str, Any]:
+        """检查工作流健康状态"""
+        return {
+            "status": "healthy",
+            "agents": {
+                "script_parser": self.script_parser is not None,
+                "shot_segmenter": self.shot_segmenter is not None,
+                "video_splitter": self.video_splitter is not None,
+                "prompt_converter": self.prompt_converter is not None,
+                "quality_auditor": self.quality_auditor is not None,
+            },
+            "workflow_built": self.workflow is not None,
+            "memory_available": self.memory is not None,
+        }
